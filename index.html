@@ -15,13 +15,17 @@
   <!-- Babel for parsing JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
+  <!-- 외부 파이어베이스 설정 파일 불러오기 -->
+  <!-- 깃허브에 올릴 때 이 파일(index.html)과 같은 폴더에 firebase-config.js를 만들어두면 됩니다. -->
+  <script src="./firebase-config.js"></script>
+
   <!-- Firebase v11 (ES Modules) -> window 객체 브릿지 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    window.Firebase = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, setDoc, onSnapshot, collection };
+    window.Firebase = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, doc, setDoc, onSnapshot, collection };
     window.firebaseLoaded = true;
     window.dispatchEvent(new Event('firebase-loaded'));
   </script>
@@ -126,8 +130,8 @@
       // 데이터 동기화 코어 함수 (Firebase or LocalStorage)
       const syncData = (newData) => {
         if (isFirebaseMode && fb && user) {
-          const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-          const docRef = fb.doc(fb.db, 'artifacts', appId, 'public', 'data', 'worklogs', 'main');
+          // 본인 개인 데이터베이스 컬렉션 경로입니다. 
+          const docRef = fb.doc(fb.db, 'worklogs', 'mainData');
           
           const updates = {};
           // 복잡한 중첩 배열 객체들은 모두 JSON.stringify 처리하여 Firestore 내부 변환 에러(c050) 방지
@@ -150,7 +154,11 @@
 
       // 초기 환경 및 Firebase 로딩
       useEffect(() => {
-        if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+        // window.firebaseConfig는 외부 파일(firebase-config.js)에서 로드됩니다.
+        const config = window.firebaseConfig || {};
+        const isConfigured = config.apiKey && config.apiKey !== "API_KEY를_입력하세요";
+
+        if (!isConfigured) {
           // 로컬 스토리지 데이터 로드
           setItems(JSON.parse(window.localStorage.getItem('worklog_items_v4') || window.localStorage.getItem('worklog_items_v3')) || initialDefaultItems);
           setApprovalLine(JSON.parse(window.localStorage.getItem('worklog_approval_v4') || window.localStorage.getItem('worklog_approval_v3')) || defaultApprovalLine);
@@ -165,19 +173,13 @@
 
         const setupFirebase = async (FirebaseInstance) => {
           try {
-            const firebaseConfig = JSON.parse(__firebase_config);
-            const app = FirebaseInstance.initializeApp(firebaseConfig);
+            const app = FirebaseInstance.initializeApp(config);
             const auth = FirebaseInstance.getAuth(app);
             const db = FirebaseInstance.getFirestore(app);
 
-            const initAuth = async () => {
-              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await FirebaseInstance.signInWithCustomToken(auth, __initial_auth_token);
-              } else {
-                await FirebaseInstance.signInAnonymously(auth);
-              }
-            };
-            await initAuth();
+            // 개인 파이어베이스는 기본적으로 '익명 로그인'을 사용합니다.
+            // (파이어베이스 콘솔 -> Authentication -> Sign-in method 탭에서 '익명(Anonymous)'을 꼭 활성화해주세요!)
+            await FirebaseInstance.signInAnonymously(auth);
 
             FirebaseInstance.onAuthStateChanged(auth, (u) => {
               setUser(u);
@@ -185,6 +187,7 @@
             });
           } catch(e) {
             console.error("Firebase 초기화 에러:", e);
+            alert("파이어베이스 연결 실패. API Key나 설정값을 확인해주세요.");
             setLoading(false);
           }
         };
@@ -199,18 +202,13 @@
       // Firebase 실시간 리스너 (실시간 동기화)
       useEffect(() => {
         if (!fb || !user) return;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const docRef = fb.doc(fb.db, 'artifacts', appId, 'public', 'data', 'worklogs', 'main');
+        const docRef = fb.doc(fb.db, 'worklogs', 'mainData');
 
         const unsubscribe = fb.onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data();
             if (data.itemsJson) setItems(JSON.parse(data.itemsJson));
-            else if (data.items) setItems(data.items); // 이전 버전 호환
-
             if (data.approvalLineJson) setApprovalLine(JSON.parse(data.approvalLineJson));
-            else if (data.approvalLine) setApprovalLine(data.approvalLine); // 이전 버전 호환
-
             if (data.dailyRecordsJson) setDailyRecords(JSON.parse(data.dailyRecordsJson));
             if (data.monthlyPlansJson) setMonthlyPlans(JSON.parse(data.monthlyPlansJson));
             if (data.remarksJson) setRemarks(JSON.parse(data.remarksJson));
