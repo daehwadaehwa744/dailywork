@@ -447,14 +447,22 @@
               .print-hidden { display: none !important; }
               .print-shadow-none { box-shadow: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; border: none !important; }
               
-              /* 테이블 콤팩트화 */
-              table { width: 100% !important; page-break-inside: auto; }
+              /* 테이블 콤팩트화 및 열 너비 고정 */
+              table { width: 100% !important; page-break-inside: auto; table-layout: fixed !important; }
               tr { page-break-inside: avoid; page-break-after: auto; }
               th, td { 
-                padding: 3px 2px !important; 
+                padding: 4px 2px !important; 
                 font-size: 11px !important; 
                 line-height: 1.2 !important; 
               }
+
+              /* 텍스트 컬럼: 너비 확보 및 줄바꿈 완전 차단 */
+              .col-main { width: 12% !important; white-space: nowrap !important; word-break: keep-all !important; }
+              .col-sub  { width: 15% !important; white-space: nowrap !important; word-break: keep-all !important; }
+              .col-name { width: 25% !important; white-space: nowrap !important; word-break: keep-all !important; text-align: left !important; padding-left: 6px !important; }
+              
+              /* 숫자 입력 컬럼: 남은 48% 공간을 8개 열에 각각 6%씩 동일하게 배분 */
+              .col-num { width: 6% !important; }
               
               /* 텍스트 입력칸 최적화 */
               input, textarea { 
@@ -554,66 +562,53 @@
 
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border border-gray-400 text-sm text-center">
-                <colgroup>
-                  <col style={{ width: '13%' }} />
-                  <col style={{ width: '16%' }} />
-                  <col style={{ width: '23%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '6%' }} />
-                </colgroup>
                 <thead>
                   <tr className="bg-gray-100">
-                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap break-keep">대분류</th>
-                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap break-keep">중분류</th>
-                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap break-keep">항목명</th>
-                    <th colSpan={2} className="border border-gray-400 p-2 font-bold bg-blue-50 text-blue-800 print:whitespace-nowrap">월 계획 ({currentMonth})</th>
-                    <th colSpan={2} className="border border-gray-400 p-2 font-bold bg-green-50 text-green-800 print:whitespace-nowrap">일계 ({selectedDate.slice(-2)}일)</th>
-                    <th colSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap">월계</th>
-                    <th colSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap">누계</th>
+                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold w-24 col-main">대분류</th>
+                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold w-32 col-sub">중분류</th>
+                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold col-name">항목명</th>
+                    <th colSpan={2} className="border border-gray-400 p-2 font-bold bg-blue-50 text-blue-800">월 계획 ({currentMonth})</th>
+                    <th colSpan={2} className="border border-gray-400 p-2 font-bold bg-green-50 text-green-800">일계 ({selectedDate.slice(-2)}일)</th>
+                    <th colSpan={2} className="border border-gray-400 p-2 font-bold">월계</th>
+                    <th colSpan={2} className="border border-gray-400 p-2 font-bold">누계</th>
                   </tr>
                   <tr className="bg-gray-50">
-                    <th className="border border-gray-400 p-1 font-medium bg-blue-50">건</th>
-                    <th className="border border-gray-400 p-1 font-medium bg-blue-50">명</th>
-                    <th className="border border-gray-400 p-1 font-medium bg-green-50">건</th>
-                    <th className="border border-gray-400 p-1 font-medium bg-green-50">명</th>
-                    <th className="border border-gray-400 p-1 font-medium">건</th>
-                    <th className="border border-gray-400 p-1 font-medium">명</th>
-                    <th className="border border-gray-400 p-1 font-medium">건</th>
-                    <th className="border border-gray-400 p-1 font-medium">명</th>
+                    <th className="border border-gray-400 p-1 w-14 font-medium bg-blue-50 col-num">건</th>
+                    <th className="border border-gray-400 p-1 w-14 font-medium bg-blue-50 col-num">명</th>
+                    <th className="border border-gray-400 p-1 w-14 font-medium bg-green-50 col-num">건</th>
+                    <th className="border border-gray-400 p-1 w-14 font-medium bg-green-50 col-num">명</th>
+                    <th className="border border-gray-400 p-1 w-14 font-medium col-num">건</th>
+                    <th className="border border-gray-400 p-1 w-14 font-medium col-num">명</th>
+                    <th className="border border-gray-400 p-1 w-14 font-medium col-num">건</th>
+                    <th className="border border-gray-400 p-1 w-14 font-medium col-num">명</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="bg-slate-800 text-white font-bold">
-                    <td colSpan={3} className="border border-gray-400 p-2 print:whitespace-nowrap break-keep">총 계</td>
-                    <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.planC || 0}</td>
-                    <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.planP || 0}</td>
-                    <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.dayC || 0}</td>
-                    <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.dayP || 0}</td>
-                    <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.monC || 0}</td>
-                    <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.monP || 0}</td>
-                    <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.yearC || 0}</td>
-                    <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.yearP || 0}</td>
+                    <td colSpan={3} className="border border-gray-400 p-2">총 계</td>
+                    <td className="border border-gray-400 p-2 bg-slate-700 col-num">{grandTotal.planC || 0}</td>
+                    <td className="border border-gray-400 p-2 bg-slate-700 col-num">{grandTotal.planP || 0}</td>
+                    <td className="border border-gray-400 p-2 bg-slate-700 col-num">{grandTotal.dayC || 0}</td>
+                    <td className="border border-gray-400 p-2 bg-slate-700 col-num">{grandTotal.dayP || 0}</td>
+                    <td className="border border-gray-400 p-2 bg-slate-700 col-num">{grandTotal.monC || 0}</td>
+                    <td className="border border-gray-400 p-2 bg-slate-700 col-num">{grandTotal.monP || 0}</td>
+                    <td className="border border-gray-400 p-2 bg-slate-700 col-num">{grandTotal.yearC || 0}</td>
+                    <td className="border border-gray-400 p-2 bg-slate-700 col-num">{grandTotal.yearP || 0}</td>
                   </tr>
 
                   {renderRows.map((row, idx) => {
                     if (row.type === 'subtotal') {
                       return (
                         <tr key={`subtotal-${idx}`} className="bg-gray-100 font-bold">
-                          <td colSpan={3} className="border border-gray-400 p-2 tracking-wide text-gray-700 print:whitespace-nowrap break-keep">{row.title}</td>
-                          <td className="border border-gray-400 p-2 text-blue-800">{row.data.planC}</td>
-                          <td className="border border-gray-400 p-2 text-blue-800">{row.data.planP}</td>
-                          <td className="border border-gray-400 p-2 text-green-800">{row.data.dayC}</td>
-                          <td className="border border-gray-400 p-2 text-green-800">{row.data.dayP}</td>
-                          <td className="border border-gray-400 p-2 text-gray-800">{row.data.monC}</td>
-                          <td className="border border-gray-400 p-2 text-gray-800">{row.data.monP}</td>
-                          <td className="border border-gray-400 p-2 text-gray-800">{row.data.yearC}</td>
-                          <td className="border border-gray-400 p-2 text-gray-800">{row.data.yearP}</td>
+                          <td colSpan={3} className="border border-gray-400 p-2 tracking-wide text-gray-700">{row.title}</td>
+                          <td className="border border-gray-400 p-2 text-blue-800 col-num">{row.data.planC}</td>
+                          <td className="border border-gray-400 p-2 text-blue-800 col-num">{row.data.planP}</td>
+                          <td className="border border-gray-400 p-2 text-green-800 col-num">{row.data.dayC}</td>
+                          <td className="border border-gray-400 p-2 text-green-800 col-num">{row.data.dayP}</td>
+                          <td className="border border-gray-400 p-2 text-gray-800 col-num">{row.data.monC}</td>
+                          <td className="border border-gray-400 p-2 text-gray-800 col-num">{row.data.monP}</td>
+                          <td className="border border-gray-400 p-2 text-gray-800 col-num">{row.data.yearC}</td>
+                          <td className="border border-gray-400 p-2 text-gray-800 col-num">{row.data.yearP}</td>
                         </tr>
                       );
                     }
@@ -621,25 +616,25 @@
                     return (
                       <tr key={`row-${row.item.id}`} className="hover:bg-gray-50 transition-colors">
                         {row.isFirstMain && (
-                          <td rowSpan={row.mainRowSpan} className="border border-gray-400 p-1 font-bold bg-white align-middle print:whitespace-nowrap break-keep">
+                          <td rowSpan={row.mainRowSpan} className="border border-gray-400 p-1 font-bold bg-white align-middle col-main">
                             {row.item.main}
                           </td>
                         )}
                         {row.isFirstSub && (
-                          <td rowSpan={row.subRowSpan} className="border border-gray-400 p-1 font-medium bg-white align-middle print:whitespace-nowrap break-keep">
+                          <td rowSpan={row.subRowSpan} className="border border-gray-400 p-1 font-medium bg-white align-middle col-sub">
                             {row.item.sub}
                           </td>
                         )}
-                        <td className="border border-gray-400 p-1 text-left px-3 print:whitespace-nowrap break-keep">{row.item.name}</td>
+                        <td className="border border-gray-400 p-1 px-3 col-name text-left">{row.item.name}</td>
                         
-                        <td className="border border-gray-300 p-0 bg-blue-50/30">
+                        <td className="border border-gray-300 p-0 bg-blue-50/30 col-num">
                           <input 
                             type="number" min="0" value={row.plan.count || ''} 
                             onChange={(e) => handleUpdate('plan', row.item.id, 'count', e.target.value)}
                             className="w-full h-full text-center p-2 outline-none focus:bg-blue-100 hover:bg-blue-50 transition-colors bg-transparent" placeholder="0"
                           />
                         </td>
-                        <td className="border border-gray-300 p-0 bg-blue-50/30">
+                        <td className="border border-gray-300 p-0 bg-blue-50/30 col-num">
                           <input 
                             type="number" min="0" value={row.plan.people || ''} 
                             onChange={(e) => handleUpdate('plan', row.item.id, 'people', e.target.value)}
@@ -647,14 +642,14 @@
                           />
                         </td>
                         
-                        <td className="border border-gray-300 p-0 bg-green-50/30">
+                        <td className="border border-gray-300 p-0 bg-green-50/30 col-num">
                           <input 
                             type="number" min="0" value={row.daily.count || ''} 
                             onChange={(e) => handleUpdate('daily', row.item.id, 'count', e.target.value)}
                             className="w-full h-full text-center p-2 outline-none focus:bg-green-100 hover:bg-green-50 transition-colors bg-transparent font-medium" placeholder="0"
                           />
                         </td>
-                        <td className="border border-gray-300 p-0 bg-green-50/30">
+                        <td className="border border-gray-300 p-0 bg-green-50/30 col-num">
                           <input 
                             type="number" min="0" value={row.daily.people || ''} 
                             onChange={(e) => handleUpdate('daily', row.item.id, 'people', e.target.value)}
@@ -662,10 +657,10 @@
                           />
                         </td>
                         
-                        <td className="border border-gray-300 p-2 bg-gray-50">{row.monthly.count}</td>
-                        <td className="border border-gray-300 p-2 bg-gray-50">{row.monthly.people}</td>
-                        <td className="border border-gray-300 p-2 bg-gray-50">{row.yearly.count}</td>
-                        <td className="border border-gray-300 p-2 bg-gray-50">{row.yearly.people}</td>
+                        <td className="border border-gray-300 p-2 bg-gray-50 col-num">{row.monthly.count}</td>
+                        <td className="border border-gray-300 p-2 bg-gray-50 col-num">{row.monthly.people}</td>
+                        <td className="border border-gray-300 p-2 bg-gray-50 col-num">{row.yearly.count}</td>
+                        <td className="border border-gray-300 p-2 bg-gray-50 col-num">{row.yearly.people}</td>
                       </tr>
                     );
                   })}
