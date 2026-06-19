@@ -554,30 +554,43 @@
 
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border border-gray-400 text-sm text-center">
+                <colgroup>
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '23%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-100">
-                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold w-24">대분류</th>
-                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold w-32">중분류</th>
-                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold">항목명</th>
-                    <th colSpan={2} className="border border-gray-400 p-2 font-bold bg-blue-50 text-blue-800">월 계획 ({currentMonth})</th>
-                    <th colSpan={2} className="border border-gray-400 p-2 font-bold bg-green-50 text-green-800">일계 ({selectedDate.slice(-2)}일)</th>
-                    <th colSpan={2} className="border border-gray-400 p-2 font-bold">월계</th>
-                    <th colSpan={2} className="border border-gray-400 p-2 font-bold">누계</th>
+                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap break-keep">대분류</th>
+                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap break-keep">중분류</th>
+                    <th rowSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap break-keep">항목명</th>
+                    <th colSpan={2} className="border border-gray-400 p-2 font-bold bg-blue-50 text-blue-800 print:whitespace-nowrap">월 계획 ({currentMonth})</th>
+                    <th colSpan={2} className="border border-gray-400 p-2 font-bold bg-green-50 text-green-800 print:whitespace-nowrap">일계 ({selectedDate.slice(-2)}일)</th>
+                    <th colSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap">월계</th>
+                    <th colSpan={2} className="border border-gray-400 p-2 font-bold print:whitespace-nowrap">누계</th>
                   </tr>
                   <tr className="bg-gray-50">
-                    <th className="border border-gray-400 p-1 w-14 font-medium bg-blue-50">건</th>
-                    <th className="border border-gray-400 p-1 w-14 font-medium bg-blue-50">명</th>
-                    <th className="border border-gray-400 p-1 w-14 font-medium bg-green-50">건</th>
-                    <th className="border border-gray-400 p-1 w-14 font-medium bg-green-50">명</th>
-                    <th className="border border-gray-400 p-1 w-14 font-medium">건</th>
-                    <th className="border border-gray-400 p-1 w-14 font-medium">명</th>
-                    <th className="border border-gray-400 p-1 w-14 font-medium">건</th>
-                    <th className="border border-gray-400 p-1 w-14 font-medium">명</th>
+                    <th className="border border-gray-400 p-1 font-medium bg-blue-50">건</th>
+                    <th className="border border-gray-400 p-1 font-medium bg-blue-50">명</th>
+                    <th className="border border-gray-400 p-1 font-medium bg-green-50">건</th>
+                    <th className="border border-gray-400 p-1 font-medium bg-green-50">명</th>
+                    <th className="border border-gray-400 p-1 font-medium">건</th>
+                    <th className="border border-gray-400 p-1 font-medium">명</th>
+                    <th className="border border-gray-400 p-1 font-medium">건</th>
+                    <th className="border border-gray-400 p-1 font-medium">명</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="bg-slate-800 text-white font-bold">
-                    <td colSpan={3} className="border border-gray-400 p-2">총 계</td>
+                    <td colSpan={3} className="border border-gray-400 p-2 print:whitespace-nowrap break-keep">총 계</td>
                     <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.planC || 0}</td>
                     <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.planP || 0}</td>
                     <td className="border border-gray-400 p-2 bg-slate-700">{grandTotal.dayC || 0}</td>
@@ -592,7 +605,7 @@
                     if (row.type === 'subtotal') {
                       return (
                         <tr key={`subtotal-${idx}`} className="bg-gray-100 font-bold">
-                          <td colSpan={3} className="border border-gray-400 p-2 tracking-wide text-gray-700">{row.title}</td>
+                          <td colSpan={3} className="border border-gray-400 p-2 tracking-wide text-gray-700 print:whitespace-nowrap break-keep">{row.title}</td>
                           <td className="border border-gray-400 p-2 text-blue-800">{row.data.planC}</td>
                           <td className="border border-gray-400 p-2 text-blue-800">{row.data.planP}</td>
                           <td className="border border-gray-400 p-2 text-green-800">{row.data.dayC}</td>
@@ -608,16 +621,16 @@
                     return (
                       <tr key={`row-${row.item.id}`} className="hover:bg-gray-50 transition-colors">
                         {row.isFirstMain && (
-                          <td rowSpan={row.mainRowSpan} className="border border-gray-400 p-1 font-bold bg-white align-middle">
+                          <td rowSpan={row.mainRowSpan} className="border border-gray-400 p-1 font-bold bg-white align-middle print:whitespace-nowrap break-keep">
                             {row.item.main}
                           </td>
                         )}
                         {row.isFirstSub && (
-                          <td rowSpan={row.subRowSpan} className="border border-gray-400 p-1 font-medium bg-white align-middle">
+                          <td rowSpan={row.subRowSpan} className="border border-gray-400 p-1 font-medium bg-white align-middle print:whitespace-nowrap break-keep">
                             {row.item.sub}
                           </td>
                         )}
-                        <td className="border border-gray-400 p-1 text-left px-3">{row.item.name}</td>
+                        <td className="border border-gray-400 p-1 text-left px-3 print:whitespace-nowrap break-keep">{row.item.name}</td>
                         
                         <td className="border border-gray-300 p-0 bg-blue-50/30">
                           <input 
