@@ -447,10 +447,10 @@
               .print-hidden { display: none !important; }
               .print-shadow-none { box-shadow: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; border: none !important; }
               
-              /* 테이블 콤팩트화 및 열 너비 고정 */
-              table { width: 100% !important; page-break-inside: auto; table-layout: fixed !important; }
-              tr { page-break-inside: avoid; page-break-after: auto; }
-              th, td { 
+              /* 메인 데이터 테이블 전용 (전체 폭 차지 및 컬럼 비율 고정) */
+              table.main-table { width: 100% !important; page-break-inside: auto; table-layout: fixed !important; }
+              table.main-table tr { page-break-inside: avoid; page-break-after: auto; }
+              table.main-table th, table.main-table td { 
                 padding: 4px 2px !important; 
                 font-size: 11px !important; 
                 line-height: 1.2 !important; 
@@ -464,6 +464,13 @@
               /* 숫자 입력 컬럼: 남은 48% 공간을 8개 열에 각각 6%씩 동일하게 배분 */
               .col-num { width: 6% !important; }
               
+              /* 결재칸 테이블 전용 (100%로 늘어나지 않도록 auto 설정) */
+              table.approval-table { width: auto !important; table-layout: fixed !important; }
+              table.approval-table th, table.approval-table td { padding: 2px !important; font-size: 11px !important; }
+              table.approval-table .h-16 { height: 45px !important; }
+              table.approval-table .w-16 { width: 45px !important; }
+              table.approval-table .w-8  { width: 20px !important; }
+
               /* 텍스트 입력칸 최적화 */
               input, textarea { 
                 border: none !important; 
@@ -485,10 +492,6 @@
               .pt-4 { padding-top: 0 !important; }
               .mb-8 { margin-bottom: 12px !important; }
               .mt-8 { margin-top: 12px !important; }
-              
-              /* 결재칸 사이즈 압축 */
-              .h-16 { height: 40px !important; }
-              .w-16 { width: 45px !important; }
               
               /* 비고란 크기 고정 */
               textarea { height: 60px !important; }
@@ -535,7 +538,8 @@
                 <p className="text-gray-500 mt-2 font-medium">일자 : {selectedDate}</p>
               </div>
 
-              <table className="border-collapse border-2 border-gray-800 text-sm bg-white">
+              {/* 결재칸 (인쇄 시 폭 100% 방지 및 크기 고정을 위해 approval-table 클래스 추가) */}
+              <table className="border-collapse border-2 border-gray-800 text-sm bg-white approval-table">
                 <tbody>
                   <tr>
                     <td rowSpan={2} className="w-8 bg-gray-100 border border-gray-800 font-bold px-1 whitespace-nowrap text-center">결<br/>재</td>
@@ -561,7 +565,7 @@
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-400 text-sm text-center">
+              <table className="w-full border-collapse border border-gray-400 text-sm text-center main-table">
                 <thead>
                   <tr className="bg-gray-100">
                     <th rowSpan={2} className="border border-gray-400 p-2 font-bold w-24 col-main">대분류</th>
