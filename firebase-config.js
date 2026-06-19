@@ -1,8 +1,8 @@
 window.firebaseConfig = {
-  apiKey: "본인의_API_KEY",
-  authDomain: "본인의_PROJECT_ID.firebaseapp.com",
-  projectId: "본인의_PROJECT_ID",
-  storageBucket: "본인의_PROJECT_ID.appspot.com",
-  messagingSenderId: "본인의_SENDER_ID",
-  appId: "본인의_APP_ID"
+  apiKey: "AIzaSyDsDwY2lLI0AdsfBHppIIlfYMAqucACjgY",
+  authDomain: "dailywork-68f81.firebaseapp.com",
+  projectId: "dailywork-68f81",
+  storageBucket: "dailywork-68f81.firebasestorage.app",
+  messagingSenderId: "377337685706",
+  appId: "1:377337685706:web:ca70502f1d293e06a93633"
 };
