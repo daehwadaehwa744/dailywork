@@ -16,7 +16,6 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
   <!-- 외부 파이어베이스 설정 파일 불러오기 -->
-  <!-- 깃허브에 올릴 때 이 파일(index.html)과 같은 폴더에 firebase-config.js를 만들어두면 됩니다. -->
   <script src="./firebase-config.js"></script>
 
   <!-- Firebase v11 (ES Modules) -> window 객체 브릿지 -->
@@ -42,11 +41,10 @@
 <body class="bg-gray-100 text-gray-800">
   <div id="root"></div>
 
-  <!-- 등록한 'react-classic' 프리셋을 적용하여 import 오류 방지 -->
   <script type="text/babel" data-presets="react-classic">
     const { useState, useMemo, useEffect, useRef } = React;
 
-    // --- 아이콘 컴포넌트 (lucide-react 대체) ---
+    // --- 아이콘 컴포넌트 ---
     const IconBase = ({ children, className = "", ...props }) => (
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{children}</svg>
     );
@@ -58,9 +56,11 @@
     const Save = (props) => <IconBase {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></IconBase>;
     const ArrowUp = (props) => <IconBase {...props}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></IconBase>;
     const ArrowDown = (props) => <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></IconBase>;
-    const History = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></IconBase>;
+    const HistoryIcon = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></IconBase>;
     const RotateCcw = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
     const Cloud = (props) => <IconBase {...props}><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></IconBase>;
+    const MessageSquare = (props) => <IconBase {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></IconBase>;
+    const BookOpen = (props) => <IconBase {...props}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></IconBase>;
 
     // --- 핵심 로직 및 데이터 ---
     const generateId = () => Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
@@ -107,19 +107,27 @@
       const [dailyRecords, setDailyRecords] = useState({});
       const [monthlyPlans, setMonthlyPlans] = useState({});
       const [remarks, setRemarks] = useState({});
+      
+      // 소급적용 및 메모 관련 상태 추가
+      const [retroLogs, setRetroLogs] = useState([]);
+      const [cellMemos, setCellMemos] = useState({});
 
-      // Closure 방지용 Refs (동기화 함수에서 최신 상태 참조)
+      // Closure 방지용 Refs
       const itemsRef = useRef(items);
       const approvalLineRef = useRef(approvalLine);
       const dailyRecordsRef = useRef(dailyRecords);
       const monthlyPlansRef = useRef(monthlyPlans);
       const remarksRef = useRef(remarks);
+      const retroLogsRef = useRef(retroLogs);
+      const cellMemosRef = useRef(cellMemos);
 
       useEffect(() => { itemsRef.current = items; }, [items]);
       useEffect(() => { approvalLineRef.current = approvalLine; }, [approvalLine]);
       useEffect(() => { dailyRecordsRef.current = dailyRecords; }, [dailyRecords]);
       useEffect(() => { monthlyPlansRef.current = monthlyPlans; }, [monthlyPlans]);
       useEffect(() => { remarksRef.current = remarks; }, [remarks]);
+      useEffect(() => { retroLogsRef.current = retroLogs; }, [retroLogs]);
+      useEffect(() => { cellMemosRef.current = cellMemos; }, [cellMemos]);
 
       // Firebase 관련 상태
       const [loading, setLoading] = useState(true);
@@ -127,58 +135,56 @@
       const [fb, setFb] = useState(null);
       const [user, setUser] = useState(null);
 
-      // 데이터 동기화 코어 함수 (Firebase or LocalStorage)
+      // 데이터 동기화 코어 함수
       const syncData = (newData) => {
         if (isFirebaseMode && fb && user) {
-          // 본인 개인 데이터베이스 컬렉션 경로입니다. 
           const docRef = fb.doc(fb.db, 'worklogs', 'mainData');
-          
           const updates = {};
-          // 복잡한 중첩 배열 객체들은 모두 JSON.stringify 처리하여 Firestore 내부 변환 에러(c050) 방지
+          
           if (newData.items !== undefined) updates.itemsJson = JSON.stringify(newData.items);
           if (newData.approvalLine !== undefined) updates.approvalLineJson = JSON.stringify(newData.approvalLine);
           if (newData.dailyRecords !== undefined) updates.dailyRecordsJson = JSON.stringify(newData.dailyRecords);
           if (newData.monthlyPlans !== undefined) updates.monthlyPlansJson = JSON.stringify(newData.monthlyPlans);
           if (newData.remarks !== undefined) updates.remarksJson = JSON.stringify(newData.remarks);
+          if (newData.retroLogs !== undefined) updates.retroLogsJson = JSON.stringify(newData.retroLogs);
+          if (newData.cellMemos !== undefined) updates.cellMemosJson = JSON.stringify(newData.cellMemos);
           
           fb.setDoc(docRef, updates, { merge: true }).catch(console.error);
         } else {
-          // Firebase 설정 없으면 로컬 환경으로 폴백
+          // 로컬 폴백
           if (newData.items !== undefined) window.localStorage.setItem('worklog_items_v4', JSON.stringify(newData.items));
           if (newData.approvalLine !== undefined) window.localStorage.setItem('worklog_approval_v4', JSON.stringify(newData.approvalLine));
           if (newData.dailyRecords !== undefined) window.localStorage.setItem('worklog_daily_v4', JSON.stringify(newData.dailyRecords));
           if (newData.monthlyPlans !== undefined) window.localStorage.setItem('worklog_plans_v4', JSON.stringify(newData.monthlyPlans));
           if (newData.remarks !== undefined) window.localStorage.setItem('worklog_remarks_v4', JSON.stringify(newData.remarks));
+          if (newData.retroLogs !== undefined) window.localStorage.setItem('worklog_retrologs_v4', JSON.stringify(newData.retroLogs));
+          if (newData.cellMemos !== undefined) window.localStorage.setItem('worklog_memos_v4', JSON.stringify(newData.cellMemos));
         }
       };
 
-      // 초기 환경 및 Firebase 로딩
+      // 초기 로딩
       useEffect(() => {
-        // window.firebaseConfig는 외부 파일(firebase-config.js)에서 로드됩니다.
         const config = window.firebaseConfig || {};
         const isConfigured = config.apiKey && config.apiKey !== "API_KEY를_입력하세요";
 
         if (!isConfigured) {
-          // 로컬 스토리지 데이터 로드
-          setItems(JSON.parse(window.localStorage.getItem('worklog_items_v4') || window.localStorage.getItem('worklog_items_v3')) || initialDefaultItems);
-          setApprovalLine(JSON.parse(window.localStorage.getItem('worklog_approval_v4') || window.localStorage.getItem('worklog_approval_v3')) || defaultApprovalLine);
-          setDailyRecords(JSON.parse(window.localStorage.getItem('worklog_daily_v4') || window.localStorage.getItem('worklog_daily_v3') || '{}'));
-          setMonthlyPlans(JSON.parse(window.localStorage.getItem('worklog_plans_v4') || window.localStorage.getItem('worklog_plans_v3') || '{}'));
-          setRemarks(JSON.parse(window.localStorage.getItem('worklog_remarks_v4') || window.localStorage.getItem('worklog_remarks_v3') || '{}'));
+          setItems(JSON.parse(window.localStorage.getItem('worklog_items_v4')) || initialDefaultItems);
+          setApprovalLine(JSON.parse(window.localStorage.getItem('worklog_approval_v4')) || defaultApprovalLine);
+          setDailyRecords(JSON.parse(window.localStorage.getItem('worklog_daily_v4') || '{}'));
+          setMonthlyPlans(JSON.parse(window.localStorage.getItem('worklog_plans_v4') || '{}'));
+          setRemarks(JSON.parse(window.localStorage.getItem('worklog_remarks_v4') || '{}'));
+          setRetroLogs(JSON.parse(window.localStorage.getItem('worklog_retrologs_v4') || '[]'));
+          setCellMemos(JSON.parse(window.localStorage.getItem('worklog_memos_v4') || '{}'));
           setLoading(false);
           return;
         }
 
         setIsFirebaseMode(true);
-
         const setupFirebase = async (FirebaseInstance) => {
           try {
             const app = FirebaseInstance.initializeApp(config);
             const auth = FirebaseInstance.getAuth(app);
             const db = FirebaseInstance.getFirestore(app);
-
-            // 개인 파이어베이스는 기본적으로 '익명 로그인'을 사용합니다.
-            // (파이어베이스 콘솔 -> Authentication -> Sign-in method 탭에서 '익명(Anonymous)'을 꼭 활성화해주세요!)
             await FirebaseInstance.signInAnonymously(auth);
 
             FirebaseInstance.onAuthStateChanged(auth, (u) => {
@@ -187,23 +193,19 @@
             });
           } catch(e) {
             console.error("Firebase 초기화 에러:", e);
-            alert("파이어베이스 연결 실패. API Key나 설정값을 확인해주세요.");
+            alert("파이어베이스 연결 실패. 설정을 확인해주세요.");
             setLoading(false);
           }
         };
 
-        if (window.firebaseLoaded) {
-          setupFirebase(window.Firebase);
-        } else {
-          window.addEventListener('firebase-loaded', () => setupFirebase(window.Firebase));
-        }
+        if (window.firebaseLoaded) setupFirebase(window.Firebase);
+        else window.addEventListener('firebase-loaded', () => setupFirebase(window.Firebase));
       }, []);
 
-      // Firebase 실시간 리스너 (실시간 동기화)
+      // 파이어베이스 실시간 구독
       useEffect(() => {
         if (!fb || !user) return;
         const docRef = fb.doc(fb.db, 'worklogs', 'mainData');
-
         const unsubscribe = fb.onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data();
@@ -212,20 +214,19 @@
             if (data.dailyRecordsJson) setDailyRecords(JSON.parse(data.dailyRecordsJson));
             if (data.monthlyPlansJson) setMonthlyPlans(JSON.parse(data.monthlyPlansJson));
             if (data.remarksJson) setRemarks(JSON.parse(data.remarksJson));
+            if (data.retroLogsJson) setRetroLogs(JSON.parse(data.retroLogsJson));
+            if (data.cellMemosJson) setCellMemos(JSON.parse(data.cellMemosJson));
           }
           setLoading(false);
         }, (err) => {
           console.error("Firebase 구독 에러:", err);
           setLoading(false);
         });
-
         return () => unsubscribe();
       }, [fb, user]);
 
       useEffect(() => {
-        if (isMounted && typeof window !== 'undefined') {
-          window.localStorage.setItem('worklog_date_v4', selectedDate);
-        }
+        if (isMounted && typeof window !== 'undefined') window.localStorage.setItem('worklog_date_v4', selectedDate);
       }, [selectedDate, isMounted]);
 
       useEffect(() => setIsMounted(true), []);
@@ -233,24 +234,23 @@
       const currentYear = selectedDate ? selectedDate.substring(0, 4) : '';
       const currentMonth = selectedDate ? selectedDate.substring(0, 7) : '';
 
+      // UI 상태
       const [isSettingModalOpen, setIsSettingModalOpen] = useState(false);
+      const [isRetroModalOpen, setIsRetroModalOpen] = useState(false);
+      const [memoModalTarget, setMemoModalTarget] = useState(null); 
       const [settingTab, setSettingTab] = useState('items'); 
       const [editingItems, setEditingItems] = useState([]);
       const [editingApprovalLine, setEditingApprovalLine] = useState([]);
       const [historyIdx, setHistoryIdx] = useState(null); 
+      
+      const [newRetro, setNewRetro] = useState({ targetDate: todayDate, itemId: '', field: 'count', amount: '', reason: '' });
 
+      // 항목 설정
       const openSettingModal = () => {
         const editData = items.map(item => {
           const sorted = [...item.versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
           const latest = sorted[sorted.length - 1] || { main: '', sub: '', name: '' };
-          return {
-            id: item.id,
-            versions: JSON.parse(JSON.stringify(item.versions)), 
-            deletedDate: item.deletedDate,
-            main: latest.main,
-            sub: latest.sub,
-            name: latest.name,
-          };
+          return { id: item.id, versions: JSON.parse(JSON.stringify(item.versions)), deletedDate: item.deletedDate, main: latest.main, sub: latest.sub, name: latest.name };
         });
         setEditingItems(editData);
         setEditingApprovalLine(JSON.parse(JSON.stringify(approvalLine)));
@@ -260,32 +260,18 @@
 
       const saveItems = () => {
         const cleanedAppr = editingApprovalLine.filter(appr => appr.role.trim() !== '');
-
         const newItemsToSave = editingItems.map(ei => {
           const sorted = [...ei.versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
           const latest = sorted[sorted.length - 1];
 
           if (latest && (latest.main !== ei.main || latest.sub !== ei.sub || latest.name !== ei.name) && ei.name.trim() !== '') {
             if (latest.applyDate === todayDate) {
-              latest.main = ei.main;
-              latest.sub = ei.sub;
-              latest.name = ei.name;
+              latest.main = ei.main; latest.sub = ei.sub; latest.name = ei.name;
             } else {
-              ei.versions.push({
-                versionId: generateId(),
-                applyDate: todayDate,
-                main: ei.main,
-                sub: ei.sub,
-                name: ei.name
-              });
+              ei.versions.push({ versionId: generateId(), applyDate: todayDate, main: ei.main, sub: ei.sub, name: ei.name });
             }
           }
-
-          return {
-            id: ei.id,
-            versions: ei.versions.filter(v => v.name.trim() !== ''),
-            deletedDate: ei.deletedDate
-          };
+          return { id: ei.id, versions: ei.versions.filter(v => v.name.trim() !== ''), deletedDate: ei.deletedDate };
         }).filter(item => item.versions.length > 0);
 
         setItems(newItemsToSave);
@@ -294,156 +280,104 @@
         setIsSettingModalOpen(false);
       };
 
-      const handleEditItem = (index, field, value) => {
-        const newItems = [...editingItems];
-        newItems[index][field] = value;
-        setEditingItems(newItems);
-      };
-
-      const addNewItem = () => {
-        const newId = `item_${generateId()}`;
-        setEditingItems([
-          ...editingItems,
-          {
-            id: newId,
-            main: '', sub: '', name: '',
-            versions: [{ versionId: generateId(), applyDate: todayDate, main: '', sub: '', name: '' }],
-            deletedDate: null
-          }
-        ]);
-      };
-
-      const handleRemoveItem = (index) => {
-        const newItems = [...editingItems];
-        newItems[index].deletedDate = todayDate;
-        setEditingItems(newItems);
-      };
-
-      const handleRestoreItem = (index) => {
-        const newItems = [...editingItems];
-        newItems[index].deletedDate = null;
-        setEditingItems(newItems);
-      };
-
-      const moveItem = (index, direction) => {
-        if (direction === -1 && index === 0) return;
-        if (direction === 1 && index === editingItems.length - 1) return;
-        const newItems = [...editingItems];
-        const temp = newItems[index];
-        newItems[index] = newItems[index + direction];
-        newItems[index + direction] = temp;
-        setEditingItems(newItems);
+      const handleEditItem = (idx, field, value) => { const n = [...editingItems]; n[idx][field] = value; setEditingItems(n); };
+      const addNewItem = () => setEditingItems([...editingItems, { id: `item_${generateId()}`, main: '', sub: '', name: '', versions: [{ versionId: generateId(), applyDate: todayDate, main: '', sub: '', name: '' }], deletedDate: null }]);
+      const handleRemoveItem = (idx) => { const n = [...editingItems]; n[idx].deletedDate = todayDate; setEditingItems(n); };
+      const handleRestoreItem = (idx) => { const n = [...editingItems]; n[idx].deletedDate = null; setEditingItems(n); };
+      const moveItem = (idx, dir) => {
+        if ((dir === -1 && idx === 0) || (dir === 1 && idx === editingItems.length - 1)) return;
+        const n = [...editingItems]; const t = n[idx]; n[idx] = n[idx + dir]; n[idx + dir] = t; setEditingItems(n);
       };
 
       const currentHistoryItem = historyIdx !== null ? editingItems[historyIdx] : null;
-
       const updateVersion = (vIdx, field, value) => {
-        const newItems = [...editingItems];
-        newItems[historyIdx].versions[vIdx][field] = value;
-        
-        const sorted = [...newItems[historyIdx].versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
-        const latest = sorted[sorted.length - 1];
-        if (latest) {
-          newItems[historyIdx].main = latest.main;
-          newItems[historyIdx].sub = latest.sub;
-          newItems[historyIdx].name = latest.name;
-        }
-        setEditingItems(newItems);
+        const n = [...editingItems]; n[historyIdx].versions[vIdx][field] = value;
+        const latest = [...n[historyIdx].versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime()).pop();
+        if (latest) { n[historyIdx].main = latest.main; n[historyIdx].sub = latest.sub; n[historyIdx].name = latest.name; }
+        setEditingItems(n);
       };
-
       const addVersion = () => {
-        const newItems = [...editingItems];
-        const latest = [...newItems[historyIdx].versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime()).pop();
-        newItems[historyIdx].versions.push({
-          versionId: generateId(),
-          applyDate: todayDate,
-          main: latest ? latest.main : '',
-          sub: latest ? latest.sub : '',
-          name: latest ? latest.name : ''
-        });
-        setEditingItems(newItems);
+        const n = [...editingItems]; const latest = [...n[historyIdx].versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime()).pop();
+        n[historyIdx].versions.push({ versionId: generateId(), applyDate: todayDate, main: latest?.main||'', sub: latest?.sub||'', name: latest?.name||'' });
+        setEditingItems(n);
       };
-
       const removeVersion = (vIdx) => {
-        const newItems = [...editingItems];
-        if (newItems[historyIdx].versions.length <= 1) {
-          alert("최소 1개의 변경 이력(버전)은 유지해야 합니다.");
-          return;
-        }
-        newItems[historyIdx].versions.splice(vIdx, 1);
-        
-        const sorted = [...newItems[historyIdx].versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
-        const latest = sorted[sorted.length - 1];
-        newItems[historyIdx].main = latest.main;
-        newItems[historyIdx].sub = latest.sub;
-        newItems[historyIdx].name = latest.name;
-        setEditingItems(newItems);
+        const n = [...editingItems];
+        if (n[historyIdx].versions.length <= 1) return alert("최소 1개의 변경 이력(버전)은 유지해야 합니다.");
+        n[historyIdx].versions.splice(vIdx, 1);
+        const latest = [...n[historyIdx].versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime()).pop();
+        n[historyIdx].main = latest.main; n[historyIdx].sub = latest.sub; n[historyIdx].name = latest.name;
+        setEditingItems(n);
       };
 
-      const handleEditApproval = (index, field, value) => {
-        const newAppr = [...editingApprovalLine];
-        newAppr[index][field] = value;
-        setEditingApprovalLine(newAppr);
-      };
-      const addApproval = () => {
-        const newId = `appr_${generateId()}`;
-        setEditingApprovalLine([...editingApprovalLine, { id: newId, role: '', mark: '' }]);
-      };
-      const removeApproval = (index) => setEditingApprovalLine(editingApprovalLine.filter((_, i) => i !== index));
-      const moveApproval = (index, direction) => {
-        if (direction === -1 && index === 0) return;
-        if (direction === 1 && index === editingApprovalLine.length - 1) return;
-        const newAppr = [...editingApprovalLine];
-        const temp = newAppr[index];
-        newAppr[index] = newAppr[index + direction];
-        newAppr[index + direction] = temp;
-        setEditingApprovalLine(newAppr);
+      const handleEditApproval = (idx, field, value) => { const n = [...editingApprovalLine]; n[idx][field] = value; setEditingApprovalLine(n); };
+      const addApproval = () => setEditingApprovalLine([...editingApprovalLine, { id: `appr_${generateId()}`, role: '', mark: '' }]);
+      const removeApproval = (idx) => setEditingApprovalLine(editingApprovalLine.filter((_, i) => i !== index));
+      const moveApproval = (idx, dir) => {
+        if ((dir === -1 && idx === 0) || (dir === 1 && idx === editingApprovalLine.length - 1)) return;
+        const n = [...editingApprovalLine]; const t = n[idx]; n[idx] = n[idx + dir]; n[idx + dir] = t; setEditingApprovalLine(n);
       };
 
+      // 입력 데이터 및 소급 처리
       const handleLocalUpdate = (storeType, id, field, value) => {
         const numValue = value === '' ? 0 : parseInt(value, 10);
         if (storeType === 'daily') {
-          setDailyRecords(prev => ({
-            ...prev,
-            [selectedDate]: {
-              ...(prev[selectedDate] || {}),
-              [id]: { ...(prev[selectedDate]?.[id] || { count: 0, people: 0 }), [field]: numValue }
-            }
-          }));
+          setDailyRecords(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || {}), [id]: { ...(prev[selectedDate]?.[id] || { count: 0, people: 0 }), [field]: numValue } } }));
         } else {
-          setMonthlyPlans(prev => ({
-            ...prev,
-            [currentMonth]: {
-              ...(prev[currentMonth] || {}),
-              [id]: { ...(prev[currentMonth]?.[id] || { count: 0, people: 0 }), [field]: numValue }
-            }
-          }));
+          setMonthlyPlans(prev => ({ ...prev, [currentMonth]: { ...(prev[currentMonth] || {}), [id]: { ...(prev[currentMonth]?.[id] || { count: 0, people: 0 }), [field]: numValue } } }));
         }
       };
 
-      // 입력칸에서 포커스가 벗어날 때(onBlur)만 Firebase 동기화 트리거 (입력 깜빡임 방지)
-      const handleInputBlur = () => {
-        syncData({ dailyRecords: dailyRecordsRef.current, monthlyPlans: monthlyPlansRef.current });
+      const handleInputBlur = () => syncData({ dailyRecords: dailyRecordsRef.current, monthlyPlans: monthlyPlansRef.current });
+
+      const handleAddRetroLog = () => {
+        if (!newRetro.itemId || !newRetro.amount || !newRetro.reason) return alert("항목, 수치, 사유를 정확히 입력해주세요.");
+        const log = {
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          targetDate: newRetro.targetDate,
+          itemId: newRetro.itemId,
+          field: newRetro.field,
+          amount: parseInt(newRetro.amount, 10),
+          reason: newRetro.reason
+        };
+        const updated = [...retroLogs, log];
+        setRetroLogs(updated);
+        syncData({ retroLogs: updated });
+        setNewRetro({ ...newRetro, amount: '', reason: '' });
       };
 
+      const handleDeleteRetroLog = (id) => {
+        if (!confirm("정말 이 소급 내역을 삭제하시겠습니까? (합산된 수치가 복구됩니다)")) return;
+        const updated = retroLogs.filter(log => log.id !== id);
+        setRetroLogs(updated);
+        syncData({ retroLogs: updated });
+      };
+
+      const saveMemo = (text) => {
+        const { storeType, date, item, field } = memoModalTarget;
+        const key = `${storeType}_${date}_${item.id}_${field}`;
+        const updated = { ...cellMemos };
+        if (text.trim() === '') delete updated[key];
+        else updated[key] = text;
+        
+        setCellMemos(updated);
+        syncData({ cellMemos: updated });
+        setMemoModalTarget(null);
+      };
+
+      // 데이터 렌더링 트리 연산
       const { renderRows, grandTotal } = useMemo(() => {
         if (!selectedDate || !items) return { renderRows: [], grandTotal: {} };
 
+        // 1. 유효 항목 필터링
         const activeItems = items.map(item => {
           const validVersions = item.versions.filter(v => v.applyDate <= selectedDate);
           if (validVersions.length === 0) return null; 
-          
           validVersions.sort((a, b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
           const currentVersion = validVersions[validVersions.length - 1];
-          
           if (item.deletedDate && selectedDate >= item.deletedDate) return null;
-
-          return {
-            id: item.id,
-            main: currentVersion.main || '분류없음',
-            sub: currentVersion.sub || '분류없음',
-            name: currentVersion.name || '이름없음',
-          };
+          return { id: item.id, main: currentVersion.main || '분류없음', sub: currentVersion.sub || '분류없음', name: currentVersion.name || '이름없음' };
         }).filter(Boolean);
 
         const tree = {};
@@ -453,23 +387,45 @@
           tree[item.main][item.sub].push(item);
         });
 
+        // 2. 일일 실적 및 소급 데이터 집계
         const monthlyDataMap = {};
         const yearlyDataMap = {};
-        
+        const dailyRetroMap = {};
+        const monthlyRetroMap = {};
+        const yearlyRetroMap = {};
+
+        // 원본 일계 집계
         Object.entries(dailyRecords || {}).forEach(([date, record]) => {
           if (date.startsWith(currentMonth)) {
             Object.entries(record || {}).forEach(([itemId, data]) => {
               if (!monthlyDataMap[itemId]) monthlyDataMap[itemId] = { count: 0, people: 0 };
-              monthlyDataMap[itemId].count += (data.count || 0);
-              monthlyDataMap[itemId].people += (data.people || 0);
+              monthlyDataMap[itemId].count += (data.count || 0); monthlyDataMap[itemId].people += (data.people || 0);
             });
           }
           if (date.startsWith(currentYear)) {
             Object.entries(record || {}).forEach(([itemId, data]) => {
               if (!yearlyDataMap[itemId]) yearlyDataMap[itemId] = { count: 0, people: 0 };
-              yearlyDataMap[itemId].count += (data.count || 0);
-              yearlyDataMap[itemId].people += (data.people || 0);
+              yearlyDataMap[itemId].count += (data.count || 0); yearlyDataMap[itemId].people += (data.people || 0);
             });
+          }
+        });
+
+        // 소급 데이터 집계
+        retroLogs.forEach(log => {
+          const month = log.targetDate.substring(0, 7);
+          const year = log.targetDate.substring(0, 4);
+
+          if (log.targetDate === selectedDate) {
+            if (!dailyRetroMap[log.itemId]) dailyRetroMap[log.itemId] = { count: 0, people: 0 };
+            dailyRetroMap[log.itemId][log.field] += log.amount;
+          }
+          if (month === currentMonth) {
+            if (!monthlyRetroMap[log.itemId]) monthlyRetroMap[log.itemId] = { count: 0, people: 0 };
+            monthlyRetroMap[log.itemId][log.field] += log.amount;
+          }
+          if (year === currentYear) {
+            if (!yearlyRetroMap[log.itemId]) yearlyRetroMap[log.itemId] = { count: 0, people: 0 };
+            yearlyRetroMap[log.itemId][log.field] += log.amount;
           }
         });
 
@@ -479,16 +435,25 @@
         Object.keys(tree).forEach(main => {
           const subKeys = Object.keys(tree[main]);
           const mainItemCount = subKeys.reduce((acc, sub) => acc + tree[main][sub].length, 0);
-          
           const mainTotal = { planC: 0, planP: 0, dayC: 0, dayP: 0, monC: 0, monP: 0, yearC: 0, yearP: 0 };
 
           subKeys.forEach((sub, subIdx) => {
             const subItems = tree[main][sub];
             subItems.forEach((item, itemIdx) => {
               const plan = (monthlyPlans[currentMonth] && monthlyPlans[currentMonth][item.id]) || { count: 0, people: 0 };
-              const daily = (dailyRecords[selectedDate] && dailyRecords[selectedDate][item.id]) || { count: 0, people: 0 };
-              const monthly = monthlyDataMap[item.id] || { count: 0, people: 0 };
-              const yearly = yearlyDataMap[item.id] || { count: 0, people: 0 };
+              const dailyBase = (dailyRecords[selectedDate] && dailyRecords[selectedDate][item.id]) || { count: 0, people: 0 };
+              const dailyRetro = dailyRetroMap[item.id] || { count: 0, people: 0 };
+              
+              const monBase = monthlyDataMap[item.id] || { count: 0, people: 0 };
+              const monRetro = monthlyRetroMap[item.id] || { count: 0, people: 0 };
+              
+              const yearBase = yearlyDataMap[item.id] || { count: 0, people: 0 };
+              const yearRetro = yearlyRetroMap[item.id] || { count: 0, people: 0 };
+
+              // 최종 합산 계산
+              const daily = { count: dailyBase.count + dailyRetro.count, people: dailyBase.people + dailyRetro.people };
+              const monthly = { count: monBase.count + monRetro.count, people: monBase.people + monRetro.people };
+              const yearly = { count: yearBase.count + yearRetro.count, people: yearBase.people + yearRetro.people };
 
               mainTotal.planC += plan.count; mainTotal.planP += plan.people;
               mainTotal.dayC += daily.count; mainTotal.dayP += daily.people;
@@ -502,7 +467,7 @@
                 mainRowSpan: mainItemCount,
                 isFirstSub: itemIdx === 0,
                 subRowSpan: subItems.length,
-                plan, daily, monthly, yearly
+                plan, dailyBase, dailyRetro, daily, monthly, yearly
               });
             });
           });
@@ -516,22 +481,59 @@
         });
 
         return { renderRows: rows, grandTotal: gTotal };
-      }, [items, selectedDate, dailyRecords, monthlyPlans, currentMonth, currentYear]);
+      }, [items, selectedDate, dailyRecords, monthlyPlans, currentMonth, currentYear, retroLogs]);
 
-      const handlePrint = () => {
-        window.print();
+      const handlePrint = () => window.print();
+
+      // 셀 렌더링 헬퍼 컴포넌트
+      const renderInputCell = (storeType, row, field, bgClass) => {
+        const baseValue = storeType === 'plan' ? row.plan[field] : row.dailyBase[field];
+        const retroValue = storeType === 'daily' ? row.dailyRetro[field] : 0;
+        const memoDate = storeType === 'plan' ? currentMonth : selectedDate;
+        const memoKey = `${storeType}_${memoDate}_${row.item.id}_${field}`;
+        const memoText = cellMemos[memoKey];
+        const hasMemo = !!memoText;
+        const displayTotal = baseValue + retroValue;
+
+        return (
+          <td key={`${row.item.id}-${storeType}-${field}`} className={`border border-gray-300 p-0 ${bgClass} col-num align-middle relative`}>
+            {/* 화면 렌더링용 입력칸 */}
+            <div className="w-full h-full flex items-center justify-center print-hidden relative group">
+              <input 
+                type="number" min="0" value={baseValue || ''}
+                onChange={(e) => handleLocalUpdate(storeType, row.item.id, field, e.target.value)}
+                onBlur={handleInputBlur}
+                className="w-full h-full text-center p-2 outline-none hover:bg-black/5 focus:bg-white transition-colors bg-transparent font-medium" 
+                placeholder="0"
+              />
+              {/* 소급 뱃지 */}
+              {retroValue !== 0 && (
+                <span className="absolute bottom-0.5 right-0.5 text-[9px] text-red-600 font-bold pointer-events-none pr-0.5" title={`소급적용 반영됨 (${retroValue > 0 ? '+'+retroValue : retroValue})`}>
+                  {retroValue > 0 ? `+${retroValue}` : retroValue}
+                </span>
+              )}
+              {/* 메모 아이콘 */}
+              <button 
+                onClick={() => setMemoModalTarget({ storeType, date: memoDate, item: row.item, field, text: memoText || '' })}
+                className={`absolute top-0 right-0 p-1 transition-all ${hasMemo ? 'text-amber-500 opacity-100' : 'text-gray-400 opacity-0 group-hover:opacity-100 hover:text-amber-500'}`}
+                title={hasMemo ? `메모: ${memoText}` : "메모 추가"}
+              >
+                <MessageSquare className="w-3 h-3" />
+              </button>
+            </div>
+            {/* PDF 인쇄용 합산 텍스트 (입력칸, 메모, 소급 뱃지 숨김) */}
+            <div className="print-text w-full text-center font-medium">
+              {displayTotal === 0 ? '' : displayTotal}
+            </div>
+          </td>
+        );
       };
 
-      const uniqueMains = [...new Set(editingItems.map(i => i.main).filter(Boolean))];
-      const uniqueSubs = [...new Set(editingItems.map(i => i.sub).filter(Boolean))];
-
       if (!isMounted) return null;
-
       if (loading) {
         return (
           <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 text-gray-500 font-bold">
-            <Cloud className="w-10 h-10 mb-4 animate-pulse text-blue-500" />
-            데이터를 불러오는 중입니다...
+            <Cloud className="w-10 h-10 mb-4 animate-pulse text-blue-500" />데이터를 불러오는 중입니다...
           </div>
         );
       }
@@ -539,72 +541,51 @@
       return (
         <div className="min-h-screen bg-gray-100 p-4 sm:p-8 font-sans text-gray-800">
           <style dangerouslySetInnerHTML={{__html: `
-            /* 화면용 기본 입력칸 스핀버튼 숨김 */
             input[type=number]::-webkit-inner-spin-button, 
             input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
             input[type=number] { -moz-appearance: textfield; }
+            .print-text { display: none; }
 
-            /* 인쇄용 글로벌 스타일 (A4 세로, 2장 이내 최적화) */
+            /* 인쇄 최적화 (A4 세로) */
             @media print {
               body { background-color: white; margin: 0; padding: 0; color: black !important; }
               @page { size: A4 portrait; margin: 10mm 15mm; }
-              .print-hidden { display: none !important; }
+              
+              /* 숨김 처리 규칙 */
+              .print-hidden, .print-hidden * { display: none !important; }
+              .print-text { display: block !important; }
               .print-shadow-none { box-shadow: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; border: none !important; }
               
-              /* 메인 데이터 테이블 전용 (전체 폭 차지 및 컬럼 비율 고정) */
+              /* 테이블 폭 고정 최적화 */
               table.main-table { width: 100% !important; page-break-inside: auto; table-layout: fixed !important; }
               table.main-table tr { page-break-inside: avoid; page-break-after: auto; }
-              table.main-table th, table.main-table td { 
-                padding: 4px 2px !important; 
-                font-size: 11px !important; 
-                line-height: 1.2 !important; 
-              }
-
-              /* 텍스트 컬럼: 너비 확보 및 줄바꿈 완전 차단 */
+              table.main-table th, table.main-table td { padding: 4px 2px !important; font-size: 11px !important; line-height: 1.2 !important; }
               .col-main { width: 12% !important; white-space: nowrap !important; word-break: keep-all !important; }
               .col-sub  { width: 15% !important; white-space: nowrap !important; word-break: keep-all !important; }
               .col-name { width: 25% !important; white-space: nowrap !important; word-break: keep-all !important; text-align: left !important; padding-left: 6px !important; }
-              
-              /* 숫자 입력 컬럼: 남은 48% 공간을 8개 열에 각각 6%씩 동일하게 배분 */
               .col-num { width: 6% !important; }
               
-              /* 결재칸 테이블 전용 (100%로 늘어나지 않도록 auto 설정) */
+              /* 결재칸 */
               table.approval-table { width: auto !important; table-layout: fixed !important; }
               table.approval-table th, table.approval-table td { padding: 2px !important; font-size: 11px !important; }
               table.approval-table .h-16 { height: 45px !important; }
               table.approval-table .w-16 { width: 45px !important; }
               table.approval-table .w-8  { width: 20px !important; }
 
-              /* 텍스트 입력칸 최적화 */
-              input, textarea { 
-                border: none !important; 
-                background: transparent !important; 
-                resize: none !important; 
-                font-size: 11px !important; 
-                color: black !important; 
-              }
-              input[type="number"] { 
-                width: 100% !important; 
-                height: auto !important; 
-                padding: 0 !important; 
-                text-align: center;
-              }
-              
-              /* 제목 및 여백 압축 */
+              /* 여백 축소 */
+              textarea { border: none !important; background: transparent !important; resize: none !important; font-size: 11px !important; color: black !important; height: 60px !important; }
               h1 { font-size: 20px !important; margin-bottom: 2px !important; }
               p.text-gray-500 { margin-top: 0 !important; font-size: 12px !important; }
               .pt-4 { padding-top: 0 !important; }
               .mb-8 { margin-bottom: 12px !important; }
               .mt-8 { margin-top: 12px !important; }
-              
-              /* 비고란 크기 고정 */
-              textarea { height: 60px !important; }
             }
           `}} />
           
-          <datalist id="main-options">{uniqueMains.map(m => <option key={`dl-main-${m}`} value={m} />)}</datalist>
-          <datalist id="sub-options">{uniqueSubs.map(s => <option key={`dl-sub-${s}`} value={s} />)}</datalist>
+          <datalist id="main-options">{[...new Set(editingItems.map(i => i.main).filter(Boolean))].map(m => <option key={`dl-main-${m}`} value={m} />)}</datalist>
+          <datalist id="sub-options">{[...new Set(editingItems.map(i => i.sub).filter(Boolean))].map(s => <option key={`dl-sub-${s}`} value={s} />)}</datalist>
 
+          {/* 컨트롤 패널 */}
           <div className="max-w-6xl mx-auto mb-6 bg-white p-4 rounded-xl shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 print-hidden border border-gray-200">
             <div className="flex items-center gap-4">
               <div className="flex items-center bg-blue-50 text-blue-700 px-4 py-2 rounded-lg font-medium border border-blue-100">
@@ -619,20 +600,15 @@
             </div>
             <div className="flex items-center gap-3">
               <div className="text-xs font-bold px-3 py-2 rounded bg-gray-50 text-gray-500 flex items-center border border-gray-200 mr-2">
-                {isFirebaseMode ? (
-                  <span className="text-blue-600 flex items-center"><Cloud className="w-4 h-4 mr-1.5" /> 클라우드 실시간 동기화 됨</span>
-                ) : '로컬 브라우저 저장됨'}
+                {isFirebaseMode ? <span className="text-blue-600 flex items-center"><Cloud className="w-4 h-4 mr-1.5" /> 클라우드 실시간 동기화 됨</span> : '로컬 브라우저 저장됨'}
               </div>
-              <button 
-                onClick={openSettingModal}
-                className="flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium border border-gray-200"
-              >
+              <button onClick={() => setIsRetroModalOpen(true)} className="flex items-center px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition-colors font-medium border border-indigo-200">
+                <BookOpen className="w-4 h-4 mr-2" /> 소급적용 내역
+              </button>
+              <button onClick={openSettingModal} className="flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium border border-gray-200">
                 <Settings className="w-4 h-4 mr-2" /> 항목 설정
               </button>
-              <button 
-                onClick={handlePrint}
-                className="flex items-center px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg shadow-sm transition-colors font-medium"
-              >
+              <button onClick={handlePrint} className="flex items-center px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg shadow-sm transition-colors font-medium">
                 <Printer className="w-4 h-4 mr-2" /> 인쇄 / PDF 저장
               </button>
             </div>
@@ -641,9 +617,7 @@
           <div className="max-w-6xl mx-auto bg-white shadow-xl rounded-sm p-8 print-shadow-none border border-gray-200">
             <div className="flex justify-between items-start mb-8">
               <div className="pt-4">
-                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-                  {currentYear}년 평생교육 및 취미여가 업무일지
-                </h1>
+                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">{currentYear}년 평생교육 및 취미여가 업무일지</h1>
                 <p className="text-gray-500 mt-2 font-medium">일자 : {selectedDate}</p>
               </div>
 
@@ -652,20 +626,12 @@
                 <tbody>
                   <tr>
                     <td rowSpan={2} className="w-8 bg-gray-100 border border-gray-800 font-bold px-1 whitespace-nowrap text-center">결<br/>재</td>
-                    {approvalLine.map((appr) => (
-                      <td key={`appr-role-${appr.id}`} className="w-16 bg-gray-100 border border-gray-800 py-1 font-medium text-center">
-                        {appr.role}
-                      </td>
-                    ))}
+                    {approvalLine.map((appr) => <td key={`appr-role-${appr.id}`} className="w-16 bg-gray-100 border border-gray-800 py-1 font-medium text-center">{appr.role}</td>)}
                   </tr>
                   <tr>
                     {approvalLine.map((appr) => (
                       <td key={`appr-mark-${appr.id}`} className="w-16 h-16 border border-gray-800 align-middle text-center relative p-0">
-                        {appr.mark && (
-                          <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-800 text-base">
-                            {appr.mark}
-                          </span>
-                        )}
+                        {appr.mark && <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-800 text-base">{appr.mark}</span>}
                       </td>
                     ))}
                   </tr>
@@ -728,51 +694,14 @@
 
                     return (
                       <tr key={`row-${row.item.id}`} className="hover:bg-gray-50 transition-colors">
-                        {row.isFirstMain && (
-                          <td rowSpan={row.mainRowSpan} className="border border-gray-400 p-1 font-bold bg-white align-middle col-main">
-                            {row.item.main}
-                          </td>
-                        )}
-                        {row.isFirstSub && (
-                          <td rowSpan={row.subRowSpan} className="border border-gray-400 p-1 font-medium bg-white align-middle col-sub">
-                            {row.item.sub}
-                          </td>
-                        )}
+                        {row.isFirstMain && <td rowSpan={row.mainRowSpan} className="border border-gray-400 p-1 font-bold bg-white align-middle col-main">{row.item.main}</td>}
+                        {row.isFirstSub && <td rowSpan={row.subRowSpan} className="border border-gray-400 p-1 font-medium bg-white align-middle col-sub">{row.item.sub}</td>}
                         <td className="border border-gray-400 p-1 px-3 col-name text-left">{row.item.name}</td>
                         
-                        <td className="border border-gray-300 p-0 bg-blue-50/30 col-num">
-                          <input 
-                            type="number" min="0" value={row.plan.count || ''} 
-                            onChange={(e) => handleLocalUpdate('plan', row.item.id, 'count', e.target.value)}
-                            onBlur={handleInputBlur}
-                            className="w-full h-full text-center p-2 outline-none focus:bg-blue-100 hover:bg-blue-50 transition-colors bg-transparent" placeholder="0"
-                          />
-                        </td>
-                        <td className="border border-gray-300 p-0 bg-blue-50/30 col-num">
-                          <input 
-                            type="number" min="0" value={row.plan.people || ''} 
-                            onChange={(e) => handleLocalUpdate('plan', row.item.id, 'people', e.target.value)}
-                            onBlur={handleInputBlur}
-                            className="w-full h-full text-center p-2 outline-none focus:bg-blue-100 hover:bg-blue-50 transition-colors bg-transparent" placeholder="0"
-                          />
-                        </td>
-                        
-                        <td className="border border-gray-300 p-0 bg-green-50/30 col-num">
-                          <input 
-                            type="number" min="0" value={row.daily.count || ''} 
-                            onChange={(e) => handleLocalUpdate('daily', row.item.id, 'count', e.target.value)}
-                            onBlur={handleInputBlur}
-                            className="w-full h-full text-center p-2 outline-none focus:bg-green-100 hover:bg-green-50 transition-colors bg-transparent font-medium" placeholder="0"
-                          />
-                        </td>
-                        <td className="border border-gray-300 p-0 bg-green-50/30 col-num">
-                          <input 
-                            type="number" min="0" value={row.daily.people || ''} 
-                            onChange={(e) => handleLocalUpdate('daily', row.item.id, 'people', e.target.value)}
-                            onBlur={handleInputBlur}
-                            className="w-full h-full text-center p-2 outline-none focus:bg-green-100 hover:bg-green-50 transition-colors bg-transparent font-medium" placeholder="0"
-                          />
-                        </td>
+                        {renderInputCell('plan', row, 'count', 'bg-blue-50/30')}
+                        {renderInputCell('plan', row, 'people', 'bg-blue-50/30')}
+                        {renderInputCell('daily', row, 'count', 'bg-green-50/30')}
+                        {renderInputCell('daily', row, 'people', 'bg-green-50/30')}
                         
                         <td className="border border-gray-300 p-2 bg-gray-50 col-num">{row.monthly.count}</td>
                         <td className="border border-gray-300 p-2 bg-gray-50 col-num">{row.monthly.people}</td>
@@ -797,6 +726,134 @@
             </div>
           </div>
 
+          {/* 소급적용 내역 모달 */}
+          {isRetroModalOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 print-hidden p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden border border-gray-200">
+                <div className="flex justify-between items-center p-6 border-b bg-indigo-50/50">
+                  <h3 className="text-xl font-bold text-gray-800 flex items-center">
+                    <BookOpen className="w-5 h-5 mr-2 text-indigo-600" /> 소급적용 내역 (히스토리)
+                  </h3>
+                  <button onClick={() => setIsRetroModalOpen(false)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl px-2">&times;</button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto bg-gray-50 flex-1">
+                  {/* 새 소급 내역 추가 폼 */}
+                  <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm mb-6">
+                    <h4 className="font-bold text-gray-700 mb-3 text-sm flex items-center"><Plus className="w-4 h-4 mr-1"/> 새 소급 내역 등록</h4>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex-1 min-w-[120px]">
+                        <label className="block text-xs text-gray-500 mb-1">적용 대상일자</label>
+                        <input type="date" value={newRetro.targetDate} onChange={e=>setNewRetro({...newRetro, targetDate: e.target.value})} className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-indigo-500"/>
+                      </div>
+                      <div className="flex-[2] min-w-[200px]">
+                        <label className="block text-xs text-gray-500 mb-1">항목 선택</label>
+                        <select value={newRetro.itemId} onChange={e=>setNewRetro({...newRetro, itemId: e.target.value})} className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-indigo-500 bg-white">
+                          <option value="">-- 실적 항목 선택 --</option>
+                          {items.map(i => {
+                            const latest = [...i.versions].sort((a,b)=>new Date(a.applyDate).getTime()-new Date(b.applyDate).getTime()).pop();
+                            return latest ? <option key={i.id} value={i.id}>[{latest.main} &gt; {latest.sub}] {latest.name}</option> : null;
+                          })}
+                        </select>
+                      </div>
+                      <div className="w-[80px]">
+                        <label className="block text-xs text-gray-500 mb-1">구분</label>
+                        <select value={newRetro.field} onChange={e=>setNewRetro({...newRetro, field: e.target.value})} className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-indigo-500 bg-white">
+                          <option value="count">건</option><option value="people">명</option>
+                        </select>
+                      </div>
+                      <div className="w-[100px]">
+                        <label className="block text-xs text-gray-500 mb-1">추가/차감 수치</label>
+                        <input type="number" placeholder="예: 2, -1" value={newRetro.amount} onChange={e=>setNewRetro({...newRetro, amount: e.target.value})} className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-indigo-500"/>
+                      </div>
+                      <div className="flex-[2] min-w-[200px]">
+                        <label className="block text-xs text-gray-500 mb-1">사유</label>
+                        <div className="flex gap-2">
+                          <input type="text" placeholder="소급 사유 기입" value={newRetro.reason} onChange={e=>setNewRetro({...newRetro, reason: e.target.value})} className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-indigo-500"/>
+                          <button onClick={handleAddRetroLog} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm font-medium whitespace-nowrap transition-colors">등록</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 소급 내역 목록 테이블 */}
+                  <table className="w-full text-left border-collapse text-sm bg-white rounded-lg shadow-sm border border-gray-200">
+                    <thead className="bg-gray-100 text-gray-600 border-b border-gray-200">
+                      <tr>
+                        <th className="p-3 font-semibold text-center w-28">대상일자</th>
+                        <th className="p-3 font-semibold">항목명</th>
+                        <th className="p-3 font-semibold w-16 text-center">구분</th>
+                        <th className="p-3 font-semibold w-20 text-center">수치</th>
+                        <th className="p-3 font-semibold">사유</th>
+                        <th className="p-3 font-semibold text-xs text-gray-400 w-32">등록일시</th>
+                        <th className="p-3 font-semibold w-16 text-center">삭제</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {retroLogs.length === 0 ? (
+                        <tr><td colSpan="7" className="p-8 text-center text-gray-400">등록된 소급 내역이 없습니다.</td></tr>
+                      ) : (
+                        retroLogs.sort((a,b)=>new Date(b.targetDate).getTime() - new Date(a.targetDate).getTime()).map((log) => {
+                          const item = items.find(i => i.id === log.itemId);
+                          const latestName = item ? [...item.versions].pop().name : '(삭제된 항목)';
+                          return (
+                            <tr key={log.id} className="border-b last:border-0 hover:bg-gray-50">
+                              <td className="p-3 text-center font-bold text-gray-700">{log.targetDate}</td>
+                              <td className="p-3 text-gray-600">{latestName}</td>
+                              <td className="p-3 text-center text-gray-500">{log.field === 'count' ? '건' : '명'}</td>
+                              <td className="p-3 text-center font-bold text-indigo-600">{log.amount > 0 ? `+${log.amount}` : log.amount}</td>
+                              <td className="p-3 text-gray-600">{log.reason}</td>
+                              <td className="p-3 text-xs text-gray-400">{new Date(log.timestamp).toLocaleDateString('ko-KR')}</td>
+                              <td className="p-3 text-center">
+                                <button onClick={() => handleDeleteRetroLog(log.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded hover:bg-red-50" title="이 내역 삭제 (원본 롤백)">
+                                  <Trash2 className="w-4 h-4 mx-auto" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="p-4 border-t bg-gray-50 flex justify-end">
+                  <button onClick={() => setIsRetroModalOpen(false)} className="px-6 py-2.5 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 transition-colors">닫기</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 수치 메모 팝업 */}
+          {memoModalTarget && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-[60] print-hidden p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden transform scale-100 transition-all">
+                <div className="p-4 border-b bg-amber-50 flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-amber-900 flex items-center"><MessageSquare className="w-4 h-4 mr-2" /> 수치 메모</h3>
+                    <p className="text-xs text-amber-700 mt-1">
+                      [{memoModalTarget.date}] {memoModalTarget.item.name} ({memoModalTarget.field === 'count' ? '건' : '명'})
+                    </p>
+                  </div>
+                  <button onClick={() => setMemoModalTarget(null)} className="text-gray-500 hover:text-gray-800 text-xl px-2">&times;</button>
+                </div>
+                <div className="p-4">
+                  <textarea 
+                    autoFocus
+                    placeholder="수치에 관련된 특이사항이나 메모를 남겨주세요."
+                    className="w-full h-32 p-3 border border-gray-300 rounded outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-sm resize-none"
+                    value={memoModalTarget.text}
+                    onChange={(e) => setMemoModalTarget({...memoModalTarget, text: e.target.value})}
+                  />
+                  <p className="text-[11px] text-gray-400 mt-2">* 이 메모는 인쇄 시 출력되지 않습니다.</p>
+                </div>
+                <div className="p-3 border-t bg-gray-50 flex justify-end gap-2">
+                  <button onClick={() => setMemoModalTarget(null)} className="px-4 py-2 border border-gray-300 rounded text-gray-700 text-sm font-medium hover:bg-gray-100">취소</button>
+                  <button onClick={() => saveMemo(memoModalTarget.text)} className="px-4 py-2 bg-amber-500 text-white rounded text-sm font-medium hover:bg-amber-600">메모 저장</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {isSettingModalOpen && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 print-hidden p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col max-h-[90vh] overflow-hidden">
@@ -806,25 +863,14 @@
                       <Settings className="w-5 h-5 mr-2 text-gray-500" /> 설정
                     </h2>
                     <div className="flex bg-gray-200 p-1 rounded-lg">
-                      <button
-                        onClick={() => setSettingTab('items')}
-                        className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${settingTab === 'items' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
-                        항목 관리
-                      </button>
-                      <button
-                        onClick={() => setSettingTab('approval')}
-                        className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${settingTab === 'approval' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
-                        결재선 관리
-                      </button>
+                      <button onClick={() => setSettingTab('items')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${settingTab === 'items' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>항목 관리</button>
+                      <button onClick={() => setSettingTab('approval')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${settingTab === 'approval' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>결재선 관리</button>
                     </div>
                   </div>
                   <button onClick={() => setIsSettingModalOpen(false)} className="text-gray-500 hover:text-gray-800 font-bold text-xl px-2">&times;</button>
                 </div>
                 
                 <div className="p-6 overflow-y-auto bg-gray-50 flex-1 relative">
-                  
                   {settingTab === 'items' && (
                     <>
                       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
@@ -842,57 +888,21 @@
                               const isDel = !!item.deletedDate;
                               return (
                               <tr key={`edit-item-${item.id}`} className={`group border-b last:border-0 transition-colors ${isDel ? 'bg-gray-100/70' : 'hover:bg-gray-50'}`}>
-                                <td className="p-2">
-                                  <input 
-                                    list="main-options" disabled={isDel}
-                                    className={`w-full p-2 border border-transparent rounded outline-none transition-all text-sm ${isDel ? 'text-gray-400 bg-transparent line-through' : 'hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-transparent'}`}
-                                    value={item.main} onChange={(e) => handleEditItem(idx, 'main', e.target.value)} placeholder="직접입력/선택"
-                                  />
-                                </td>
-                                <td className="p-2">
-                                  <input 
-                                    list="sub-options" disabled={isDel}
-                                    className={`w-full p-2 border border-transparent rounded outline-none transition-all text-sm ${isDel ? 'text-gray-400 bg-transparent line-through' : 'hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-transparent'}`}
-                                    value={item.sub} onChange={(e) => handleEditItem(idx, 'sub', e.target.value)} placeholder="직접입력/선택"
-                                  />
-                                </td>
-                                <td className="p-2">
-                                  <input disabled={isDel}
-                                    className={`w-full p-2 border rounded outline-none text-sm ${isDel ? 'text-gray-400 bg-transparent border-transparent line-through' : 'border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`}
-                                    value={item.name} onChange={(e) => handleEditItem(idx, 'name', e.target.value)} placeholder="항목명"
-                                  />
-                                </td>
+                                <td className="p-2"><input list="main-options" disabled={isDel} className={`w-full p-2 border border-transparent rounded outline-none transition-all text-sm ${isDel ? 'text-gray-400 bg-transparent line-through' : 'hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-transparent'}`} value={item.main} onChange={(e) => handleEditItem(idx, 'main', e.target.value)} placeholder="직접입력/선택" /></td>
+                                <td className="p-2"><input list="sub-options" disabled={isDel} className={`w-full p-2 border border-transparent rounded outline-none transition-all text-sm ${isDel ? 'text-gray-400 bg-transparent line-through' : 'hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-transparent'}`} value={item.sub} onChange={(e) => handleEditItem(idx, 'sub', e.target.value)} placeholder="직접입력/선택" /></td>
+                                <td className="p-2"><input disabled={isDel} className={`w-full p-2 border rounded outline-none text-sm ${isDel ? 'text-gray-400 bg-transparent border-transparent line-through' : 'border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`} value={item.name} onChange={(e) => handleEditItem(idx, 'name', e.target.value)} placeholder="항목명" /></td>
                                 <td className="p-2 text-center flex items-center justify-center gap-1">
-                                  <button onClick={() => setHistoryIdx(idx)} className="p-1.5 text-gray-500 hover:text-indigo-600 transition-colors rounded hover:bg-indigo-50" title="변경 이력 및 삭제일자 관리">
-                                    <History className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => moveItem(idx, -1)} disabled={idx === 0 || isDel} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-20 transition-colors rounded hover:bg-blue-50" title="위로">
-                                    <ArrowUp className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => moveItem(idx, 1)} disabled={idx === editingItems.length - 1 || isDel} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-20 transition-colors rounded hover:bg-blue-50" title="아래로">
-                                    <ArrowDown className="w-4 h-4" />
-                                  </button>
-                                  {isDel ? (
-                                    <button onClick={() => handleRestoreItem(idx)} className="p-1.5 text-orange-500 hover:text-orange-600 transition-colors rounded hover:bg-orange-50 font-bold" title="삭제 복원">
-                                      <RotateCcw className="w-4 h-4" />
-                                    </button>
-                                  ) : (
-                                    <button onClick={() => handleRemoveItem(idx)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded hover:bg-red-50" title="표시 종료(삭제)">
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  )}
+                                  <button onClick={() => setHistoryIdx(idx)} className="p-1.5 text-gray-500 hover:text-indigo-600 transition-colors rounded hover:bg-indigo-50" title="변경 이력 및 삭제일자 관리"><HistoryIcon className="w-4 h-4" /></button>
+                                  <button onClick={() => moveItem(idx, -1)} disabled={idx === 0 || isDel} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-20 transition-colors rounded hover:bg-blue-50" title="위로"><ArrowUp className="w-4 h-4" /></button>
+                                  <button onClick={() => moveItem(idx, 1)} disabled={idx === editingItems.length - 1 || isDel} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-20 transition-colors rounded hover:bg-blue-50" title="아래로"><ArrowDown className="w-4 h-4" /></button>
+                                  {isDel ? <button onClick={() => handleRestoreItem(idx)} className="p-1.5 text-orange-500 hover:text-orange-600 transition-colors rounded hover:bg-orange-50 font-bold" title="삭제 복원"><RotateCcw className="w-4 h-4" /></button> : <button onClick={() => handleRemoveItem(idx)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded hover:bg-red-50" title="표시 종료(삭제)"><Trash2 className="w-4 h-4" /></button>}
                                 </td>
                               </tr>
                             )})}
                           </tbody>
                         </table>
                       </div>
-                      <button 
-                        onClick={addNewItem} 
-                        className="mt-4 w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg flex items-center justify-center hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50 transition-colors font-medium"
-                      >
-                        <Plus className="w-5 h-5 mr-2" /> 새 항목 추가
-                      </button>
+                      <button onClick={addNewItem} className="mt-4 w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg flex items-center justify-center hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50 transition-colors font-medium"><Plus className="w-5 h-5 mr-2" /> 새 항목 추가</button>
                       <p className="text-xs text-gray-500 mt-2">* 텍스트를 바로 수정하고 저장하면 오늘 날짜를 기준으로 새 버전이 자동 생성됩니다.</p>
                     </>
                   )}
@@ -913,39 +923,19 @@
                             {editingApprovalLine.map((appr, idx) => (
                               <tr key={`edit-appr-${appr.id}`} className="hover:bg-gray-50 group border-b last:border-0">
                                 <td className="p-3 text-center text-gray-400 font-medium">{idx + 1}</td>
-                                <td className="p-2">
-                                  <input 
-                                    className="w-full p-2 border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded outline-none"
-                                    value={appr.role} onChange={(e) => handleEditApproval(idx, 'role', e.target.value)} placeholder="직위명 입력"
-                                  />
-                                </td>
-                                <td className="p-2 text-center">
-                                  <input 
-                                    className="w-full p-2 border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded outline-none text-center"
-                                    value={appr.mark} onChange={(e) => handleEditApproval(idx, 'mark', e.target.value)} placeholder="전결"
-                                  />
-                                </td>
+                                <td className="p-2"><input className="w-full p-2 border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded outline-none" value={appr.role} onChange={(e) => handleEditApproval(idx, 'role', e.target.value)} placeholder="직위명 입력" /></td>
+                                <td className="p-2 text-center"><input className="w-full p-2 border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded outline-none text-center" value={appr.mark} onChange={(e) => handleEditApproval(idx, 'mark', e.target.value)} placeholder="전결" /></td>
                                 <td className="p-2 text-center flex items-center justify-center gap-1">
-                                  <button onClick={() => moveApproval(idx, -1)} disabled={idx === 0} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors rounded hover:bg-blue-50" title="위로">
-                                    <ArrowUp className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => moveApproval(idx, 1)} disabled={idx === editingApprovalLine.length - 1} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors rounded hover:bg-blue-50" title="아래로">
-                                    <ArrowDown className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => removeApproval(idx)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded hover:bg-red-50" title="삭제">
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                                  <button onClick={() => moveApproval(idx, -1)} disabled={idx === 0} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors rounded hover:bg-blue-50" title="위로"><ArrowUp className="w-4 h-4" /></button>
+                                  <button onClick={() => moveApproval(idx, 1)} disabled={idx === editingApprovalLine.length - 1} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors rounded hover:bg-blue-50" title="아래로"><ArrowDown className="w-4 h-4" /></button>
+                                  <button onClick={() => removeApproval(idx)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded hover:bg-red-50" title="삭제"><Trash2 className="w-4 h-4" /></button>
                                 </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
-                      <div className="w-full max-w-2xl mx-auto mt-4">
-                        <button onClick={addApproval} className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg flex items-center justify-center hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50 transition-colors font-medium">
-                          <Plus className="w-5 h-5 mr-2" /> 결재칸 추가
-                        </button>
-                      </div>
+                      <div className="w-full max-w-2xl mx-auto mt-4"><button onClick={addApproval} className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg flex items-center justify-center hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50 transition-colors font-medium"><Plus className="w-5 h-5 mr-2" /> 결재칸 추가</button></div>
                     </>
                   )}
 
@@ -955,14 +945,12 @@
                         <div className="flex justify-between items-center p-5 border-b bg-indigo-50/50 rounded-t-xl">
                           <div>
                             <h3 className="text-lg font-bold text-gray-800 flex items-center">
-                              <History className="w-5 h-5 mr-2 text-indigo-600" /> 
-                              <span className="text-indigo-700 mr-2">{currentHistoryItem.name || '새 항목'}</span> 변경 이력 (Time Travel)
+                              <HistoryIcon className="w-5 h-5 mr-2 text-indigo-600" /> <span className="text-indigo-700 mr-2">{currentHistoryItem.name || '새 항목'}</span> 항목 이력 관리
                             </h3>
-                            <p className="text-xs text-gray-500 mt-1">항목의 과거 이름/분류를 관리합니다. 날짜에 맞춰 표가 동적으로 바뀝니다.</p>
+                            <p className="text-xs text-gray-500 mt-1">항목의 이름과 적용 기간을 관리합니다.</p>
                           </div>
                           <button onClick={() => setHistoryIdx(null)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl px-2">&times;</button>
                         </div>
-                        
                         <div className="p-6">
                           <table className="w-full text-left border-collapse text-sm mb-4">
                             <thead className="bg-gray-100 text-gray-600">
@@ -979,87 +967,34 @@
                                 const vIdx = currentHistoryItem.versions.findIndex(orig => orig.versionId === v.versionId);
                                 return (
                                 <tr key={v.versionId} className="border-b last:border-0 hover:bg-indigo-50/30">
-                                  <td className="p-2">
-                                    <input type="date" value={v.applyDate} onChange={(e) => updateVersion(vIdx, 'applyDate', e.target.value)}
-                                      className="w-full p-2 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 outline-none font-bold text-indigo-700 bg-white" />
-                                  </td>
-                                  <td className="p-2">
-                                    <input value={v.main} onChange={(e) => updateVersion(vIdx, 'main', e.target.value)}
-                                      className="w-full p-2 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 outline-none bg-white" placeholder="대분류" />
-                                  </td>
-                                  <td className="p-2">
-                                    <input value={v.sub} onChange={(e) => updateVersion(vIdx, 'sub', e.target.value)}
-                                      className="w-full p-2 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 outline-none bg-white" placeholder="중분류" />
-                                  </td>
-                                  <td className="p-2">
-                                    <input value={v.name} onChange={(e) => updateVersion(vIdx, 'name', e.target.value)}
-                                      className="w-full p-2 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 outline-none bg-white font-medium" placeholder="항목명" />
-                                  </td>
-                                  <td className="p-2 text-center">
-                                    <button onClick={() => removeVersion(vIdx)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="이 이력 파기">
-                                      <Trash2 className="w-4 h-4 mx-auto" />
-                                    </button>
-                                  </td>
+                                  <td className="p-2"><input type="date" value={v.applyDate} onChange={(e) => updateVersion(vIdx, 'applyDate', e.target.value)} className="w-full p-2 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 outline-none font-bold text-indigo-700 bg-white" /></td>
+                                  <td className="p-2"><input value={v.main} onChange={(e) => updateVersion(vIdx, 'main', e.target.value)} className="w-full p-2 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 outline-none bg-white" placeholder="대분류" /></td>
+                                  <td className="p-2"><input value={v.sub} onChange={(e) => updateVersion(vIdx, 'sub', e.target.value)} className="w-full p-2 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 outline-none bg-white" placeholder="중분류" /></td>
+                                  <td className="p-2"><input value={v.name} onChange={(e) => updateVersion(vIdx, 'name', e.target.value)} className="w-full p-2 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 outline-none bg-white font-medium" placeholder="항목명" /></td>
+                                  <td className="p-2 text-center"><button onClick={() => removeVersion(vIdx)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="이 이력 파기"><Trash2 className="w-4 h-4 mx-auto" /></button></td>
                                 </tr>
                               )})}
                             </tbody>
                           </table>
-                          
-                          <button onClick={addVersion} className="w-full py-2 border border-indigo-200 text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors text-sm font-bold flex items-center justify-center">
-                            <Plus className="w-4 h-4 mr-1" /> 과거/미래 변경 이력 수동 추가
-                          </button>
-
-                          <div className="mt-8 p-5 bg-gray-50 border border-gray-200 rounded-lg">
-                            <h4 className="font-bold text-gray-700 mb-2 flex items-center">
-                              <Trash2 className="w-4 h-4 mr-2" /> 표시 종료 (삭제 처리)
-                            </h4>
-                            <div className="flex items-center gap-4">
-                              <input 
-                                type="date" 
-                                value={currentHistoryItem.deletedDate || ''} 
-                                onChange={(e) => {
-                                  const newItems = [...editingItems];
-                                  newItems[historyIdx].deletedDate = e.target.value || null;
-                                  setEditingItems(newItems);
-                                }}
-                                className="p-2 border border-gray-300 rounded outline-none focus:border-red-500 bg-white font-medium text-red-600"
-                              />
-                              <p className="text-sm text-gray-500">
-                                지정된 날짜 <span className="font-bold text-red-500">이후부터</span> 업무일지 표에서 항목이 완전히 사라집니다. <br/>
-                                (과거 일지를 볼 때 지장이 없도록 날짜를 신중히 선택하세요. 복원하려면 비워두세요)
-                              </p>
-                            </div>
-                          </div>
-
+                          <button onClick={addVersion} className="w-full py-2 border border-indigo-200 text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors text-sm font-bold flex items-center justify-center"><Plus className="w-4 h-4 mr-1" /> 과거/미래 변경 이력 수동 추가</button>
                         </div>
-                        <div className="p-4 border-t bg-gray-50 flex justify-end rounded-b-xl">
-                          <button onClick={() => setHistoryIdx(null)} className="px-6 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 transition-colors">
-                            확인 후 닫기
-                          </button>
-                        </div>
+                        <div className="p-4 border-t bg-gray-50 flex justify-end rounded-b-xl"><button onClick={() => setHistoryIdx(null)} className="px-6 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 transition-colors">확인 후 닫기</button></div>
                       </div>
                     </div>
                   )}
-
                 </div>
 
                 <div className="p-4 border-t border-gray-200 bg-white flex justify-end gap-3 z-10 relative">
-                  <button onClick={() => setIsSettingModalOpen(false)} className="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium transition-colors">
-                    취소
-                  </button>
-                  <button onClick={saveItems} className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center font-medium shadow-sm transition-colors">
-                    <Save className="w-4 h-4 mr-2" /> 전체 변경사항 저장
-                  </button>
+                  <button onClick={() => setIsSettingModalOpen(false)} className="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium transition-colors">취소</button>
+                  <button onClick={saveItems} className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center font-medium shadow-sm transition-colors"><Save className="w-4 h-4 mr-2" /> 전체 변경사항 저장</button>
                 </div>
               </div>
             </div>
           )}
-
         </div>
       );
     }
 
-    // --- React 렌더링 ---
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
