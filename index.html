@@ -435,17 +435,56 @@
       return (
         <div className="min-h-screen bg-gray-100 p-4 sm:p-8 font-sans text-gray-800">
           <style dangerouslySetInnerHTML={{__html: `
-            @media print {
-              body { background-color: white; margin: 0; padding: 0; }
-              @page { size: A4 landscape; margin: 15mm; }
-              .print-hidden { display: none !important; }
-              .print-shadow-none { box-shadow: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; border: none !important; }
-              input, textarea { border: none !important; background: transparent !important; resize: none !important; }
-              input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-            }
+            /* 화면용 기본 입력칸 스핀버튼 숨김 */
             input[type=number]::-webkit-inner-spin-button, 
             input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
             input[type=number] { -moz-appearance: textfield; }
+
+            /* 인쇄용 글로벌 스타일 (A4 세로, 2장 이내 최적화) */
+            @media print {
+              body { background-color: white; margin: 0; padding: 0; color: black !important; }
+              @page { size: A4 portrait; margin: 10mm 15mm; }
+              .print-hidden { display: none !important; }
+              .print-shadow-none { box-shadow: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; border: none !important; }
+              
+              /* 테이블 콤팩트화 */
+              table { width: 100% !important; page-break-inside: auto; }
+              tr { page-break-inside: avoid; page-break-after: auto; }
+              th, td { 
+                padding: 3px 2px !important; 
+                font-size: 11px !important; 
+                line-height: 1.2 !important; 
+              }
+              
+              /* 텍스트 입력칸 최적화 */
+              input, textarea { 
+                border: none !important; 
+                background: transparent !important; 
+                resize: none !important; 
+                font-size: 11px !important; 
+                color: black !important; 
+              }
+              input[type="number"] { 
+                width: 100% !important; 
+                height: auto !important; 
+                padding: 0 !important; 
+                text-align: center;
+              }
+              
+              /* 제목 및 여백 압축 */
+              h1 { font-size: 20px !important; margin-bottom: 2px !important; }
+              p.text-gray-500 { margin-top: 0 !important; font-size: 12px !important; }
+              .pt-4 { padding-top: 0 !important; }
+              .mb-8 { margin-bottom: 12px !important; }
+              .mt-8 { margin-top: 12px !important; }
+              
+              /* 결재칸 사이즈 압축 */
+              .h-16 { height: 40px !important; }
+              .w-16 { width: 45px !important; }
+              
+              /* 비고란 크기 고정 */
+              textarea { height: 60px !important; }
+            }
           `}} />
           
           <datalist id="main-options">{uniqueMains.map(m => <option key={`dl-main-${m}`} value={m} />)}</datalist>
