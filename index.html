@@ -229,6 +229,7 @@
 
       const currentYear = selectedDate ? selectedDate.substring(0, 4) : '';
       const currentMonth = selectedDate ? selectedDate.substring(0, 7) : '';
+      const currentDayOfWeek = selectedDate ? ['일', '월', '화', '수', '목', '금', '토'][new Date(selectedDate).getDay()] : '';
 
       // UI 상태
       const [isSettingModalOpen, setIsSettingModalOpen] = useState(false);
@@ -631,7 +632,7 @@
             <div className="flex justify-between items-start mb-8">
               <div className="pt-4">
                 <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">{currentYear}년 평생교육 및 취미여가 업무일지</h1>
-                <p className="text-gray-500 mt-2 font-medium">일자 : {selectedDate}</p>
+                <p className="text-gray-500 mt-2 font-medium">일자 : {selectedDate}({currentDayOfWeek})</p>
               </div>
 
               {/* 결재칸 */}
