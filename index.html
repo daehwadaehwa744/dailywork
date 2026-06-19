@@ -8,12 +8,12 @@
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- React & ReactDOM -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- React & ReactDOM (안정적인 cdnjs 사용) -->
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   
   <!-- Babel for parsing JSX -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.3/babel.min.js"></script>
   
   <!-- 외부 파이어베이스 설정 파일 불러오기 -->
   <script src="./firebase-config.js"></script>
@@ -30,19 +30,20 @@
   </script>
 
   <script>
-    // 브라우저 환경에서 Babel의 내장 'react' 프리셋을 올바르게 참조하여 classic 런타임으로 등록합니다.
-    Babel.registerPreset('react-classic', {
-      presets: [
-        [Babel.availablePresets['react'], { runtime: 'classic' }]
-      ]
-    });
+    if (typeof Babel !== 'undefined') {
+      Babel.registerPreset('react-classic', {
+        presets: [
+          [Babel.availablePresets['react'], { runtime: 'classic' }]
+        ]
+      });
+    }
   </script>
 </head>
 <body class="bg-gray-100 text-gray-800">
   <div id="root"></div>
 
   <script type="text/babel" data-presets="react-classic">
-    const { useState, useMemo, useEffect, useRef } = React;
+    const { useState, useMemo, useEffect, useRef, Fragment } = window.React;
 
     // --- 아이콘 컴포넌트 ---
     const IconBase = ({ children, className = "", ...props }) => (
@@ -57,10 +58,11 @@
     const ArrowUp = (props) => <IconBase {...props}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></IconBase>;
     const ArrowDown = (props) => <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></IconBase>;
     const HistoryIcon = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></IconBase>;
-    const RotateCcw = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
     const Cloud = (props) => <IconBase {...props}><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></IconBase>;
     const MessageSquare = (props) => <IconBase {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></IconBase>;
     const BookOpen = (props) => <IconBase {...props}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></IconBase>;
+    const GripVertical = (props) => <IconBase {...props}><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="5" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="15" cy="19" r="1.5"/></IconBase>;
+    const RotateCcw = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
 
     // --- 핵심 로직 및 데이터 ---
     const generateId = () => Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
@@ -85,8 +87,30 @@
     ].map(item => ({
       id: item.id,
       versions: [{ versionId: generateId(), applyDate: '2000-01-01', main: item.main, sub: item.sub, name: item.name, detail: item.detail }],
-      deletedDate: null
+      deletedDate: null,
+      isHardDeleted: false
     }));
+
+    // [중요] 과거 버전 데이터 구조 충돌 방지를 위한 마이그레이션 함수
+    const sanitizeItems = (itemsList) => {
+      if (!Array.isArray(itemsList)) return initialDefaultItems;
+      return itemsList.map(item => {
+        const base = { ...item };
+        // 과거 데이터(versions 배열이 없는 경우) 자동 보정
+        if (!base.versions || !Array.isArray(base.versions)) {
+          base.versions = [{ 
+            versionId: generateId(), 
+            applyDate: '2000-01-01', 
+            main: base.main || '', 
+            sub: base.sub || '', 
+            name: base.name || '', 
+            detail: base.detail || '' 
+          }];
+        }
+        if (base.isHardDeleted === undefined) base.isHardDeleted = false;
+        return base;
+      });
+    };
 
     const App = () => {
       const [isMounted, setIsMounted] = useState(false);
@@ -98,17 +122,22 @@
       });
 
       // 데이터 상태 관리
-      const [items, setItems] = useState(initialDefaultItems);
+      const [items, setItems] = useState(() => {
+        if (typeof window !== 'undefined') {
+          try {
+            const local = window.localStorage.getItem('worklog_items_v4');
+            if (local) return sanitizeItems(JSON.parse(local));
+          } catch(e) { console.warn('로컬 스토리지 데이터 파싱 오류:', e); }
+        }
+        return initialDefaultItems;
+      });
       const [approvalLine, setApprovalLine] = useState(defaultApprovalLine);
       const [dailyRecords, setDailyRecords] = useState({});
       const [monthlyPlans, setMonthlyPlans] = useState({});
       const [remarks, setRemarks] = useState({});
-      
-      // 소급적용 및 메모 관련 상태 추가
       const [retroLogs, setRetroLogs] = useState([]);
       const [cellMemos, setCellMemos] = useState({});
 
-      // Closure 방지용 Refs
       const itemsRef = useRef(items);
       const approvalLineRef = useRef(approvalLine);
       const dailyRecordsRef = useRef(dailyRecords);
@@ -131,7 +160,6 @@
       const [fb, setFb] = useState(null);
       const [user, setUser] = useState(null);
 
-      // 데이터 동기화 코어 함수
       const syncData = (newData) => {
         if (isFirebaseMode && fb && user) {
           const docRef = fb.doc(fb.db, 'worklogs', 'mainData');
@@ -158,19 +186,20 @@
         }
       };
 
-      // 초기 로딩
       useEffect(() => {
         const config = window.firebaseConfig || {};
         const isConfigured = config.apiKey && config.apiKey !== "API_KEY를_입력하세요";
 
         if (!isConfigured) {
-          setItems(JSON.parse(window.localStorage.getItem('worklog_items_v4')) || initialDefaultItems);
-          setApprovalLine(JSON.parse(window.localStorage.getItem('worklog_approval_v4')) || defaultApprovalLine);
-          setDailyRecords(JSON.parse(window.localStorage.getItem('worklog_daily_v4') || '{}'));
-          setMonthlyPlans(JSON.parse(window.localStorage.getItem('worklog_plans_v4') || '{}'));
-          setRemarks(JSON.parse(window.localStorage.getItem('worklog_remarks_v4') || '{}'));
-          setRetroLogs(JSON.parse(window.localStorage.getItem('worklog_retrologs_v4') || '[]'));
-          setCellMemos(JSON.parse(window.localStorage.getItem('worklog_memos_v4') || '{}'));
+          try {
+            setItems(sanitizeItems(JSON.parse(window.localStorage.getItem('worklog_items_v4'))) || initialDefaultItems);
+            setApprovalLine(JSON.parse(window.localStorage.getItem('worklog_approval_v4')) || defaultApprovalLine);
+            setDailyRecords(JSON.parse(window.localStorage.getItem('worklog_daily_v4') || '{}'));
+            setMonthlyPlans(JSON.parse(window.localStorage.getItem('worklog_plans_v4') || '{}'));
+            setRemarks(JSON.parse(window.localStorage.getItem('worklog_remarks_v4') || '{}'));
+            setRetroLogs(JSON.parse(window.localStorage.getItem('worklog_retrologs_v4') || '[]'));
+            setCellMemos(JSON.parse(window.localStorage.getItem('worklog_memos_v4') || '{}'));
+          } catch(e) {}
           setLoading(false);
           return;
         }
@@ -189,7 +218,6 @@
             });
           } catch(e) {
             console.error("Firebase 초기화 에러:", e);
-            alert("파이어베이스 연결 실패. 설정을 확인해주세요.");
             setLoading(false);
           }
         };
@@ -198,14 +226,13 @@
         else window.addEventListener('firebase-loaded', () => setupFirebase(window.Firebase));
       }, []);
 
-      // 파이어베이스 실시간 구독
       useEffect(() => {
         if (!fb || !user) return;
         const docRef = fb.doc(fb.db, 'worklogs', 'mainData');
         const unsubscribe = fb.onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data();
-            if (data.itemsJson) setItems(JSON.parse(data.itemsJson));
+            if (data.itemsJson) setItems(sanitizeItems(JSON.parse(data.itemsJson)));
             if (data.approvalLineJson) setApprovalLine(JSON.parse(data.approvalLineJson));
             if (data.dailyRecordsJson) setDailyRecords(JSON.parse(data.dailyRecordsJson));
             if (data.monthlyPlansJson) setMonthlyPlans(JSON.parse(data.monthlyPlansJson));
@@ -239,15 +266,107 @@
       const [editingItems, setEditingItems] = useState([]);
       const [editingApprovalLine, setEditingApprovalLine] = useState([]);
       const [historyIdx, setHistoryIdx] = useState(null); 
-      
       const [newRetro, setNewRetro] = useState({ targetDate: todayDate, itemId: '', field: 'count', amount: '', reason: '' });
 
-      // 항목 설정
+      // 드래그 앤 드롭 상태 및 로직
+      const [draggedIdx, setDraggedIdx] = useState(null);
+      const [dragOverIdx, setDragOverIdx] = useState(null);
+
+      const getGroupKey = (item) => `${item.main}|${item.sub}|${item.name}`;
+
+      const checkDropTarget = (dragIdx, dropIdx) => {
+        if (dragIdx === null || dragIdx === dropIdx) return { allowed: false };
+        const draggedItem = editingItems[dragIdx];
+        if (!draggedItem) return { allowed: false };
+        
+        const draggedKey = getGroupKey(draggedItem);
+        let prevVisible = null;
+        for (let i = dropIdx - 1; i >= 0; i--) {
+          if (!editingItems[i].isHardDeleted && i !== dragIdx) { prevVisible = editingItems[i]; break; }
+        }
+        let nextVisible = null;
+        for (let i = dropIdx; i < editingItems.length; i++) {
+          if (!editingItems[i].isHardDeleted && i !== dragIdx) { nextVisible = editingItems[i]; break; }
+        }
+
+        if (prevVisible && nextVisible) {
+          const prevKey = getGroupKey(prevVisible);
+          const nextKey = getGroupKey(nextVisible);
+          if (prevKey === nextKey && prevKey !== draggedKey) {
+            return { allowed: false }; 
+          }
+        }
+
+        const isWithinOwnGroup = (prevVisible && getGroupKey(prevVisible) === draggedKey) || 
+                                 (nextVisible && getGroupKey(nextVisible) === draggedKey);
+
+        if (isWithinOwnGroup) {
+          return { allowed: true, mode: 'single' };
+        } else {
+          return { allowed: true, mode: 'group', draggedKey };
+        }
+      };
+
+      const handleDragStart = (e, idx) => {
+        setDraggedIdx(idx);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', idx); 
+      };
+
+      const handleDragOver = (e, idx) => {
+        e.preventDefault();
+        const targetInfo = checkDropTarget(draggedIdx, idx);
+        if (targetInfo.allowed) {
+          e.dataTransfer.dropEffect = 'move';
+          if (dragOverIdx !== idx) setDragOverIdx(idx);
+        } else {
+          e.dataTransfer.dropEffect = 'none';
+          if (dragOverIdx !== null) setDragOverIdx(null);
+        }
+      };
+
+      const handleDrop = (e, dropIdx) => {
+        e.preventDefault();
+        const targetInfo = checkDropTarget(draggedIdx, dropIdx);
+        if (!targetInfo.allowed) {
+          setDragOverIdx(null);
+          return;
+        }
+
+        let newItems = [...editingItems];
+        if (targetInfo.mode === 'single') {
+          const [draggedItem] = newItems.splice(draggedIdx, 1);
+          let targetIdx = dropIdx;
+          if (draggedIdx < dropIdx) targetIdx -= 1;
+          newItems.splice(targetIdx, 0, draggedItem);
+        } else {
+          const groupItems = newItems.filter(it => getGroupKey(it) === targetInfo.draggedKey);
+          newItems = newItems.filter(it => getGroupKey(it) !== targetInfo.draggedKey);
+          
+          let insertIdx = 0;
+          for (let i = 0; i < dropIdx; i++) {
+            if (getGroupKey(editingItems[i]) !== targetInfo.draggedKey) {
+              insertIdx++;
+            }
+          }
+          newItems.splice(insertIdx, 0, ...groupItems);
+        }
+        
+        setEditingItems(newItems);
+        setDraggedIdx(null);
+        setDragOverIdx(null);
+      };
+
+      const handleDragEnd = () => {
+        setDraggedIdx(null);
+        setDragOverIdx(null);
+      };
+
       const openSettingModal = () => {
         const editData = items.map(item => {
-          const sorted = [...item.versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
+          const sorted = [...(item.versions || [])].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
           const latest = sorted[sorted.length - 1] || { main: '', sub: '', name: '', detail: '' };
-          return { id: item.id, versions: JSON.parse(JSON.stringify(item.versions)), deletedDate: item.deletedDate, main: latest.main, sub: latest.sub, name: latest.name, detail: latest.detail || '' };
+          return { id: item.id, versions: JSON.parse(JSON.stringify(item.versions || [])), deletedDate: item.deletedDate, isHardDeleted: item.isHardDeleted || false, hardDeletedDate: item.hardDeletedDate || null, main: latest.main, sub: latest.sub, name: latest.name, detail: latest.detail || '' };
         });
         setEditingItems(editData);
         setEditingApprovalLine(JSON.parse(JSON.stringify(approvalLine)));
@@ -258,7 +377,7 @@
       const saveItems = () => {
         const cleanedAppr = editingApprovalLine.filter(appr => appr.role.trim() !== '');
         const newItemsToSave = editingItems.map(ei => {
-          const sorted = [...ei.versions].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
+          const sorted = [...(ei.versions||[])].sort((a,b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
           const latest = sorted[sorted.length - 1];
 
           if (latest && (latest.main !== ei.main || latest.sub !== ei.sub || latest.name !== ei.name || latest.detail !== ei.detail) && ei.name.trim() !== '') {
@@ -268,7 +387,7 @@
               ei.versions.push({ versionId: generateId(), applyDate: todayDate, main: ei.main, sub: ei.sub, name: ei.name, detail: ei.detail });
             }
           }
-          return { id: ei.id, versions: ei.versions.filter(v => v.name.trim() !== ''), deletedDate: ei.deletedDate };
+          return { id: ei.id, versions: (ei.versions||[]).filter(v => v.name.trim() !== ''), deletedDate: ei.deletedDate, isHardDeleted: ei.isHardDeleted || false, hardDeletedDate: ei.hardDeletedDate || null };
         }).filter(item => item.versions.length > 0);
 
         setItems(newItemsToSave);
@@ -278,12 +397,32 @@
       };
 
       const handleEditItem = (idx, field, value) => { const n = [...editingItems]; n[idx][field] = value; setEditingItems(n); };
-      const addNewItem = () => setEditingItems([...editingItems, { id: `item_${generateId()}`, main: '', sub: '', name: '', detail: '', versions: [{ versionId: generateId(), applyDate: todayDate, main: '', sub: '', name: '', detail: '' }], deletedDate: null }]);
-      const handleRemoveItem = (idx) => { const n = [...editingItems]; n[idx].deletedDate = todayDate; setEditingItems(n); };
-      const handleRestoreItem = (idx) => { const n = [...editingItems]; n[idx].deletedDate = null; setEditingItems(n); };
-      const moveItem = (idx, dir) => {
-        if ((dir === -1 && idx === 0) || (dir === 1 && idx === editingItems.length - 1)) return;
-        const n = [...editingItems]; const t = n[idx]; n[idx] = n[idx + dir]; n[idx + dir] = t; setEditingItems(n);
+      
+      const insertNewItem = (idx) => {
+        const parentMain = idx >= 0 && editingItems[idx] ? editingItems[idx].main || '' : '';
+        const parentSub = idx >= 0 && editingItems[idx] ? editingItems[idx].sub || '' : '';
+        const parentName = idx >= 0 && editingItems[idx] ? editingItems[idx].name || '' : '';
+        const newItem = { 
+          id: `item_${generateId()}`, 
+          main: parentMain, 
+          sub: parentSub, 
+          name: parentName, 
+          detail: '', 
+          versions: [{ versionId: generateId(), applyDate: todayDate, main: parentMain, sub: parentSub, name: parentName, detail: '' }], 
+          deletedDate: null,
+          isHardDeleted: false
+        };
+        const newItems = [...editingItems];
+        newItems.splice(idx + 1, 0, newItem);
+        setEditingItems(newItems);
+      };
+
+      const hardRemoveItem = (idx) => {
+        if(!confirm("이 항목을 삭제하시겠습니까?\n(삭제된 항목은 '삭제 이력 및 복원' 탭에서 되살릴 수 있습니다.)")) return;
+        const newItems = [...editingItems];
+        newItems[idx].isHardDeleted = true;
+        newItems[idx].hardDeletedDate = new Date().toISOString();
+        setEditingItems(newItems);
       };
 
       const currentHistoryItem = historyIdx !== null ? editingItems[historyIdx] : null;
@@ -309,13 +448,12 @@
 
       const handleEditApproval = (idx, field, value) => { const n = [...editingApprovalLine]; n[idx][field] = value; setEditingApprovalLine(n); };
       const addApproval = () => setEditingApprovalLine([...editingApprovalLine, { id: `appr_${generateId()}`, role: '', mark: '' }]);
-      const removeApproval = (idx) => setEditingApprovalLine(editingApprovalLine.filter((_, i) => i !== index));
+      const removeApproval = (idx) => setEditingApprovalLine(editingApprovalLine.filter((_, i) => i !== idx));
       const moveApproval = (idx, dir) => {
         if ((dir === -1 && idx === 0) || (dir === 1 && idx === editingApprovalLine.length - 1)) return;
         const n = [...editingApprovalLine]; const t = n[idx]; n[idx] = n[idx + dir]; n[idx + dir] = t; setEditingApprovalLine(n);
       };
 
-      // 입력 데이터 및 소급 처리
       const handleLocalUpdate = (storeType, id, field, value) => {
         const numValue = value === '' ? 0 : parseInt(value, 10);
         if (storeType === 'daily') {
@@ -363,13 +501,12 @@
         setMemoModalTarget(null);
       };
 
-      // 데이터 렌더링 트리 연산 (하위 항목 병합 구조 및 Colspan 추가)
       const { renderRows, grandTotal } = useMemo(() => {
         if (!selectedDate || !items) return { renderRows: [], grandTotal: {} };
 
-        // 1. 유효 항목 필터링
         const activeItems = items.map(item => {
-          const validVersions = item.versions.filter(v => v.applyDate <= selectedDate);
+          if (item.isHardDeleted) return null;
+          const validVersions = (item.versions || []).filter(v => v.applyDate <= selectedDate);
           if (validVersions.length === 0) return null; 
           validVersions.sort((a, b) => new Date(a.applyDate).getTime() - new Date(b.applyDate).getTime());
           const currentVersion = validVersions[validVersions.length - 1];
@@ -388,14 +525,12 @@
           tree[m][s][n].push(item);
         });
 
-        // 2. 일일 실적 및 소급 데이터 집계
         const monthlyDataMap = {};
         const yearlyDataMap = {};
         const dailyRetroMap = {};
         const monthlyRetroMap = {};
         const yearlyRetroMap = {};
 
-        // 원본 일계 집계
         Object.entries(dailyRecords || {}).forEach(([date, record]) => {
           if (date.startsWith(currentMonth)) {
             Object.entries(record || {}).forEach(([itemId, data]) => {
@@ -411,7 +546,6 @@
           }
         });
 
-        // 소급 데이터 집계
         retroLogs.forEach(log => {
           const month = log.targetDate.substring(0, 7);
           const year = log.targetDate.substring(0, 4);
@@ -460,7 +594,6 @@
                 const yearBase = yearlyDataMap[item.id] || { count: 0, people: 0 };
                 const yearRetro = yearlyRetroMap[item.id] || { count: 0, people: 0 };
 
-                // 최종 합산 계산
                 const daily = { count: dailyBase.count + dailyRetro.count, people: dailyBase.people + dailyRetro.people };
                 const monthly = { count: monBase.count + monRetro.count, people: monBase.people + monRetro.people };
                 const yearly = { count: yearBase.count + yearRetro.count, people: yearBase.people + yearRetro.people };
@@ -498,7 +631,6 @@
 
       const handlePrint = () => window.print();
 
-      // 셀 렌더링 헬퍼 컴포넌트
       const renderInputCell = (storeType, row, field, bgClass) => {
         const baseValue = storeType === 'plan' ? row.plan[field] : row.dailyBase[field];
         const retroValue = storeType === 'daily' ? row.dailyRetro[field] : 0;
@@ -510,7 +642,6 @@
 
         return (
           <td key={`${row.item.id}-${storeType}-${field}`} className={`border border-gray-300 p-0 ${bgClass} col-num align-middle relative`}>
-            {/* 화면 렌더링용 입력칸 */}
             <div className="w-full h-full flex items-center justify-center print-hidden relative group">
               <input 
                 type="number" min="0" value={baseValue || ''}
@@ -519,13 +650,11 @@
                 className="w-full h-full text-center p-2 outline-none hover:bg-black/5 focus:bg-white transition-colors bg-transparent font-medium" 
                 placeholder="0"
               />
-              {/* 소급 뱃지 */}
               {retroValue !== 0 && (
                 <span className="absolute bottom-0.5 right-0.5 text-[9px] text-red-600 font-bold pointer-events-none pr-0.5" title={`소급적용 반영됨 (${retroValue > 0 ? '+'+retroValue : retroValue})`}>
                   {retroValue > 0 ? `+${retroValue}` : retroValue}
                 </span>
               )}
-              {/* 메모 아이콘 */}
               <button 
                 onClick={() => setMemoModalTarget({ storeType, date: memoDate, item: row.item, field, text: memoText || '' })}
                 className={`absolute top-0 right-0 p-1 transition-all ${hasMemo ? 'text-amber-500 opacity-100' : 'text-gray-400 opacity-0 group-hover:opacity-100 hover:text-amber-500'}`}
@@ -534,7 +663,6 @@
                 <MessageSquare className="w-3 h-3" />
               </button>
             </div>
-            {/* PDF 인쇄용 합산 텍스트 (입력칸, 메모, 소급 뱃지 숨김) */}
             <div className="print-text w-full text-center font-medium">
               {displayTotal === 0 ? '' : displayTotal}
             </div>
@@ -569,7 +697,7 @@
               .print-text { display: block !important; }
               .print-shadow-none { box-shadow: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; border: none !important; }
               
-              /* 테이블 폭 고정 최적화 */
+              /* 테이블 폭 고정 최적화 및 텍스트 줄바꿈 허용 */
               table.main-table { width: 100% !important; page-break-inside: auto; table-layout: fixed !important; }
               table.main-table tr { page-break-inside: avoid; page-break-after: auto; }
               table.main-table th, table.main-table td { padding: 4px 2px !important; font-size: 11px !important; line-height: 1.2 !important; }
@@ -707,7 +835,6 @@
                       );
                     }
 
-                    // 하위 항목이 비어있으면서 단일 항목명 구조일 경우 렌더링 병합 조건 판단
                     const mergeNameAndDetail = row.isFirstName && row.nameRowSpan === 1 && (!row.item.detail || row.item.detail.trim() === '');
 
                     return (
@@ -715,7 +842,6 @@
                         {row.isFirstMain && <td rowSpan={row.mainRowSpan} className="border border-gray-400 p-1 font-bold bg-white align-middle col-main">{row.item.main}</td>}
                         {row.isFirstSub && <td rowSpan={row.subRowSpan} className="border border-gray-400 p-1 font-medium bg-white align-middle col-sub">{row.item.sub}</td>}
                         
-                        {/* 항목명 병합 로직 */}
                         {row.isFirstName && (
                           mergeNameAndDetail ? (
                             <td colSpan={2} className="border border-gray-400 p-1 px-3 text-left font-medium bg-white align-middle">{row.item.name}</td>
@@ -724,7 +850,6 @@
                           )
                         )}
                         
-                        {/* 하위 항목칸 (병합 시 렌더링 생략) */}
                         {!mergeNameAndDetail && (
                           <td className="border border-gray-400 p-1 px-3 col-detail text-left text-gray-600">{row.item.detail || <span className="text-gray-300">-</span>}</td>
                         )}
@@ -769,7 +894,6 @@
                 </div>
                 
                 <div className="p-6 overflow-y-auto bg-gray-50 flex-1">
-                  {/* 새 소급 내역 추가 폼 */}
                   <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm mb-6">
                     <h4 className="font-bold text-gray-700 mb-3 text-sm flex items-center"><Plus className="w-4 h-4 mr-1"/> 새 소급 내역 등록</h4>
                     <div className="flex flex-wrap items-center gap-3">
@@ -782,7 +906,9 @@
                         <select value={newRetro.itemId} onChange={e=>setNewRetro({...newRetro, itemId: e.target.value})} className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-indigo-500 bg-white">
                           <option value="">-- 실적 항목 선택 --</option>
                           {items.map(i => {
-                            const latest = [...i.versions].sort((a,b)=>new Date(a.applyDate).getTime()-new Date(b.applyDate).getTime()).pop();
+                            if (i.isHardDeleted) return null;
+                            const validVersions = i.versions || [];
+                            const latest = [...validVersions].sort((a,b)=>new Date(a.applyDate).getTime()-new Date(b.applyDate).getTime()).pop();
                             return latest ? <option key={i.id} value={i.id}>[{latest.main} &gt; {latest.sub}] {latest.name} {latest.detail ? `- ${latest.detail}` : ''}</option> : null;
                           })}
                         </select>
@@ -807,7 +933,6 @@
                     </div>
                   </div>
 
-                  {/* 소급 내역 목록 테이블 */}
                   <table className="w-full text-left border-collapse text-sm bg-white rounded-lg shadow-sm border border-gray-200">
                     <thead className="bg-gray-100 text-gray-600 border-b border-gray-200">
                       <tr>
@@ -826,7 +951,8 @@
                       ) : (
                         retroLogs.sort((a,b)=>new Date(b.targetDate).getTime() - new Date(a.targetDate).getTime()).map((log) => {
                           const item = items.find(i => i.id === log.itemId);
-                          const latest = item ? [...item.versions].pop() : null;
+                          const validVersions = item ? (item.versions || []) : [];
+                          const latest = item ? [...validVersions].pop() : null;
                           const latestName = latest ? `${latest.name}${latest.detail ? ` (${latest.detail})` : ''}` : '(삭제된 항목)';
                           return (
                             <tr key={log.id} className="border-b last:border-0 hover:bg-gray-50">
@@ -886,6 +1012,7 @@
             </div>
           )}
 
+          {/* 항목 설정 모달 */}
           {isSettingModalOpen && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 print-hidden p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col max-h-[90vh] overflow-hidden">
@@ -903,44 +1030,92 @@
                 </div>
                 
                 <div className="p-6 overflow-y-auto bg-gray-50 flex-1 relative">
+                  
+                  {/* --- 항목 관리 탭 --- */}
                   {settingTab === 'items' && (
                     <>
-                      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                        <table className="w-full text-left border-collapse min-w-max">
+                      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden pb-4">
+                        <table className="w-full text-left border-collapse min-w-max relative">
                           <thead className="bg-gray-100 text-gray-600 text-sm">
                             <tr>
+                              <th className="p-3 border-b w-8"></th>
                               <th className="p-3 border-b font-semibold w-[20%]">대분류</th>
                               <th className="p-3 border-b font-semibold w-[20%]">중분류</th>
                               <th className="p-3 border-b font-semibold w-[20%]">항목명</th>
                               <th className="p-3 border-b font-semibold w-[20%]">하위항목</th>
-                              <th className="p-3 border-b font-semibold w-32 text-center">관리</th>
+                              <th className="p-3 border-b font-semibold w-24 text-center">관리</th>
                             </tr>
                           </thead>
                           <tbody>
+                            {/* 최상단 항목 추가 호버 구역 */}
+                            <tr className="h-3 group/gap relative bg-transparent">
+                              <td colSpan={6} className="p-0 align-middle relative cursor-pointer" onDragOver={(e) => handleDragOver(e, 0)} onDrop={(e) => handleDrop(e, 0)}>
+                                <div className={`absolute inset-x-0 inset-y-[-6px] z-10 flex items-center justify-center opacity-0 group-hover/gap:opacity-100 transition-opacity ${dragOverIdx === 0 ? 'opacity-100' : ''}`}>
+                                  <div className={`absolute w-full h-[2px] ${dragOverIdx === 0 ? 'bg-blue-500' : 'bg-blue-300'}`}></div>
+                                  <button onClick={(e) => { e.stopPropagation(); insertNewItem(-1); }} className="relative z-20 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1 shadow transition-transform hover:scale-110" title="가장 위에 항목 삽입">
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+
                             {editingItems.map((item, idx) => {
+                              if (item.isHardDeleted) return null; // 휴지통 항목 숨김
                               const isDel = !!item.deletedDate;
+                              
                               return (
-                              <tr key={`edit-item-${item.id}`} className={`group border-b last:border-0 transition-colors ${isDel ? 'bg-gray-100/70' : 'hover:bg-gray-50'}`}>
-                                <td className="p-2"><input list="main-options" disabled={isDel} className={`w-full p-2 border border-transparent rounded outline-none transition-all text-sm ${isDel ? 'text-gray-400 bg-transparent line-through' : 'hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-transparent'}`} value={item.main} onChange={(e) => handleEditItem(idx, 'main', e.target.value)} placeholder="직접입력/선택" /></td>
-                                <td className="p-2"><input list="sub-options" disabled={isDel} className={`w-full p-2 border border-transparent rounded outline-none transition-all text-sm ${isDel ? 'text-gray-400 bg-transparent line-through' : 'hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-transparent'}`} value={item.sub} onChange={(e) => handleEditItem(idx, 'sub', e.target.value)} placeholder="직접입력/선택" /></td>
-                                <td className="p-2"><input disabled={isDel} className={`w-full p-2 border rounded outline-none text-sm ${isDel ? 'text-gray-400 bg-transparent border-transparent line-through' : 'border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`} value={item.name} onChange={(e) => handleEditItem(idx, 'name', e.target.value)} placeholder="항목명" /></td>
-                                <td className="p-2"><input disabled={isDel} className={`w-full p-2 border rounded outline-none text-sm ${isDel ? 'text-gray-400 bg-transparent border-transparent line-through' : 'border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`} value={item.detail} onChange={(e) => handleEditItem(idx, 'detail', e.target.value)} placeholder="하위항목명" /></td>
-                                <td className="p-2 text-center flex items-center justify-center gap-1">
-                                  <button onClick={() => setHistoryIdx(idx)} className="p-1.5 text-gray-500 hover:text-indigo-600 transition-colors rounded hover:bg-indigo-50" title="변경 이력 및 삭제일자 관리"><HistoryIcon className="w-4 h-4" /></button>
-                                  <button onClick={() => moveItem(idx, -1)} disabled={idx === 0 || isDel} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-20 transition-colors rounded hover:bg-blue-50" title="위로"><ArrowUp className="w-4 h-4" /></button>
-                                  <button onClick={() => moveItem(idx, 1)} disabled={idx === editingItems.length - 1 || isDel} className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-20 transition-colors rounded hover:bg-blue-50" title="아래로"><ArrowDown className="w-4 h-4" /></button>
-                                  {isDel ? <button onClick={() => handleRestoreItem(idx)} className="p-1.5 text-orange-500 hover:text-orange-600 transition-colors rounded hover:bg-orange-50 font-bold" title="삭제 복원"><RotateCcw className="w-4 h-4" /></button> : <button onClick={() => handleRemoveItem(idx)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded hover:bg-red-50" title="표시 종료(삭제)"><Trash2 className="w-4 h-4" /></button>}
-                                </td>
-                              </tr>
+                              <Fragment key={`edit-group-${item.id}`}>
+                                <tr 
+                                  draggable={true}
+                                  onDragStart={(e) => handleDragStart(e, idx)}
+                                  onDragOver={(e) => handleDragOver(e, idx)}
+                                  onDrop={(e) => handleDrop(e, idx)}
+                                  className={`group border-b last:border-0 transition-all ${isDel ? 'bg-gray-100/70' : 'hover:bg-gray-50'} ${dragOverIdx === idx ? 'border-t-2 border-t-blue-500 bg-blue-50/30' : ''} ${draggedIdx === idx ? 'opacity-40 bg-gray-200' : ''}`}
+                                >
+                                  <td className="p-2 text-center text-gray-300 hover:text-gray-600 cursor-grab active:cursor-grabbing">
+                                    <GripVertical className="w-5 h-5 mx-auto" />
+                                  </td>
+                                  <td className="p-2"><input list="main-options" disabled={isDel} className={`w-full p-2 border border-transparent rounded outline-none transition-all text-sm ${isDel ? 'text-gray-400 bg-transparent line-through' : 'hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-transparent'}`} value={item.main} onChange={(e) => handleEditItem(idx, 'main', e.target.value)} placeholder="직접입력/선택" /></td>
+                                  <td className="p-2"><input list="sub-options" disabled={isDel} className={`w-full p-2 border border-transparent rounded outline-none transition-all text-sm ${isDel ? 'text-gray-400 bg-transparent line-through' : 'hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-transparent'}`} value={item.sub} onChange={(e) => handleEditItem(idx, 'sub', e.target.value)} placeholder="직접입력/선택" /></td>
+                                  <td className="p-2"><input disabled={isDel} className={`w-full p-2 border rounded outline-none text-sm ${isDel ? 'text-gray-400 bg-transparent border-transparent line-through' : 'border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`} value={item.name} onChange={(e) => handleEditItem(idx, 'name', e.target.value)} placeholder="항목명" /></td>
+                                  <td className="p-2"><input disabled={isDel} className={`w-full p-2 border rounded outline-none text-sm ${isDel ? 'text-gray-400 bg-transparent border-transparent line-through' : 'border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`} value={item.detail} onChange={(e) => handleEditItem(idx, 'detail', e.target.value)} placeholder="하위항목명" /></td>
+                                  <td className="p-2 text-center flex items-center justify-center gap-1">
+                                    <button onClick={() => setHistoryIdx(idx)} className="p-1.5 text-gray-500 hover:text-indigo-600 transition-colors rounded hover:bg-indigo-50" title="항목 버전 기록 및 표시 종료일 관리"><HistoryIcon className="w-4 h-4" /></button>
+                                    <button onClick={() => hardRemoveItem(idx)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded hover:bg-red-50" title="완전 삭제 (휴지통으로 이동)"><Trash2 className="w-4 h-4" /></button>
+                                  </td>
+                                </tr>
+                                
+                                {/* 항목과 항목 사이의 중간 삽입 호버 구역 */}
+                                <tr className="h-3 group/gap relative bg-transparent">
+                                  <td colSpan={6} className="p-0 align-middle relative cursor-pointer" onDragOver={(e) => handleDragOver(e, idx + 1)} onDrop={(e) => handleDrop(e, idx + 1)}>
+                                    <div className={`absolute inset-x-0 inset-y-[-6px] z-10 flex items-center justify-center opacity-0 group-hover/gap:opacity-100 transition-opacity ${dragOverIdx === idx + 1 ? 'opacity-100' : ''}`}>
+                                      <div className={`absolute w-full h-[2px] ${dragOverIdx === idx + 1 ? 'bg-blue-500' : 'bg-blue-300'}`}></div>
+                                      <button onClick={(e) => { e.stopPropagation(); insertNewItem(idx); }} className="relative z-20 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1 shadow transition-transform hover:scale-110" title="이 위치에 새 항목 삽입">
+                                        <Plus className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </Fragment>
                             )})}
                           </tbody>
                         </table>
                       </div>
-                      <button onClick={addNewItem} className="mt-4 w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg flex items-center justify-center hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50 transition-colors font-medium"><Plus className="w-5 h-5 mr-2" /> 새 항목 추가</button>
-                      <p className="text-xs text-gray-500 mt-2">* 텍스트를 바로 수정하고 저장하면 오늘 날짜를 기준으로 새 버전이 자동 생성됩니다.</p>
+
+                      {/* 항목을 모두 지웠을 경우를 대비한 최소한의 추가 버튼 */}
+                      {editingItems.filter(i => !i.isHardDeleted).length === 0 && (
+                        <div className="p-8 text-center bg-gray-50 border border-dashed border-gray-300 rounded-lg mt-4">
+                           <p className="text-gray-500 mb-3">등록된 항목이 없습니다.</p>
+                           <button onClick={() => insertNewItem(-1)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm font-medium transition-colors">새 항목 추가하기</button>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-gray-500 mt-3">* <strong>[드래그 앤 드롭]</strong> 행 좌측 점들을 마우스로 끌어 순서를 변경할 수 있습니다. (대분류~항목명이 동일한 그룹 중간에는 끼어들 수 없습니다.)</p>
+                      <p className="text-xs text-gray-500 mt-1">* <strong>[중간 삽입]</strong> 항목과 항목 사이를 마우스로 가리키면 표시되는 <code>+</code> 아이콘을 통해 원하는 위치에 추가할 수 있습니다.</p>
                     </>
                   )}
 
+                  {/* --- 결재선 관리 탭 --- */}
                   {settingTab === 'approval' && (
                     <>
                       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden w-full max-w-2xl mx-auto">
@@ -973,6 +1148,63 @@
                     </>
                   )}
 
+                  {/* --- 삭제 이력 및 복원 탭 (휴지통) --- */}
+                  {settingTab === 'trash' && (
+                     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
+                       <div className="p-4 bg-red-50 border-b border-red-100 flex justify-between items-center text-red-800 text-sm font-medium">
+                         <div className="flex items-center">
+                           <Trash2 className="w-5 h-5 mr-2" />
+                           실수로 삭제한 항목을 확인하고 한 번의 클릭으로 기존 내용 그대로 복원할 수 있습니다.
+                         </div>
+                       </div>
+                       <table className="w-full text-left border-collapse text-sm">
+                          <thead className="bg-gray-100 text-gray-600">
+                            <tr>
+                              <th className="p-3 border-b font-semibold">대분류</th>
+                              <th className="p-3 border-b font-semibold">중분류</th>
+                              <th className="p-3 border-b font-semibold">항목명</th>
+                              <th className="p-3 border-b font-semibold">하위항목</th>
+                              <th className="p-3 border-b font-semibold w-40 text-center">삭제 일시</th>
+                              <th className="p-3 border-b font-semibold w-32 text-center">복원 / 비우기</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {editingItems.map((item, idx) => {
+                               if (!item.isHardDeleted) return null;
+                               return (
+                                  <tr key={item.id} className="border-b last:border-0 hover:bg-gray-50">
+                                     <td className="p-3 text-gray-500">{item.main}</td>
+                                     <td className="p-3 text-gray-500">{item.sub}</td>
+                                     <td className="p-3 text-gray-800 font-medium">{item.name}</td>
+                                     <td className="p-3 text-gray-500">{item.detail}</td>
+                                     <td className="p-3 text-center text-xs text-gray-400">
+                                        {item.hardDeletedDate ? new Date(item.hardDeletedDate).toLocaleString('ko-KR') : '알 수 없음'}
+                                     </td>
+                                     <td className="p-3 text-center flex justify-center gap-2">
+                                        <button onClick={() => {
+                                           const n = [...editingItems];
+                                           n[idx].isHardDeleted = false;
+                                           setEditingItems(n);
+                                        }} className="px-3 py-1.5 bg-green-500 text-white hover:bg-green-600 shadow-sm rounded font-bold transition-colors text-xs flex items-center"><RotateCcw className="w-3 h-3 mr-1"/> 복원</button>
+                                        <button onClick={() => {
+                                           if(!confirm("이 항목을 휴지통에서 비우면 완전히 영구 삭제되며 절대 복구할 수 없습니다. 정말 비우시겠습니까?")) return;
+                                           const n = [...editingItems];
+                                           n.splice(idx, 1);
+                                           setEditingItems(n);
+                                        }} className="px-2 py-1.5 bg-gray-200 text-gray-600 hover:bg-red-500 hover:text-white rounded font-bold transition-colors text-xs">영구삭제</button>
+                                     </td>
+                                  </tr>
+                               )
+                            })}
+                            {editingItems.filter(i => i.isHardDeleted).length === 0 && (
+                               <tr><td colSpan="6" className="p-10 text-center text-gray-400">휴지통에 삭제된 항목이 없습니다.</td></tr>
+                            )}
+                          </tbody>
+                       </table>
+                     </div>
+                  )}
+
+                  {/* 세부 항목 버전 및 표시 종료일 관리 팝업 */}
                   {currentHistoryItem && (
                     <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-[60] p-4 flex items-start justify-center overflow-y-auto">
                       <div className="bg-white border border-gray-300 rounded-xl shadow-2xl w-full max-w-5xl flex flex-col mb-10">
@@ -986,6 +1218,36 @@
                           <button onClick={() => setHistoryIdx(null)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl px-2">&times;</button>
                         </div>
                         <div className="p-6">
+                          <div className="bg-white p-4 border border-gray-200 rounded-lg mb-6 flex items-center justify-between shadow-sm">
+                            <div>
+                              <h4 className="font-bold text-gray-800 text-sm flex items-center">
+                                <CalendarIcon className="w-4 h-4 mr-1.5 text-gray-500"/> 항목 표시 종료일 (목록 숨기기)
+                              </h4>
+                              <p className="text-xs text-gray-500 mt-1">설정한 날짜 이후부터는 업무일지 작성 화면에 이 항목이 표시되지 않지만 기존 기록은 보존됩니다.</p>
+                            </div>
+                            <div className="flex items-center">
+                              <input 
+                                type="date" 
+                                value={currentHistoryItem.deletedDate || ''} 
+                                onChange={(e) => {
+                                  const n = [...editingItems];
+                                  n[historyIdx].deletedDate = e.target.value || null;
+                                  setEditingItems(n);
+                                }} 
+                                className="p-2 border border-gray-300 rounded text-sm outline-none focus:border-indigo-500 font-bold text-indigo-700"
+                              />
+                              {currentHistoryItem.deletedDate && (
+                                <button onClick={() => {
+                                  const n = [...editingItems];
+                                  n[historyIdx].deletedDate = null;
+                                  setEditingItems(n);
+                                }} className="ml-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-sm font-medium transition-colors">
+                                  종료일 초기화
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
                           <table className="w-full text-left border-collapse text-sm mb-4">
                             <thead className="bg-gray-100 text-gray-600">
                               <tr>
@@ -1022,6 +1284,9 @@
 
                 <div className="p-4 border-t border-gray-200 bg-white flex justify-end gap-3 z-10 relative">
                   <button onClick={() => setIsSettingModalOpen(false)} className="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium transition-colors">취소</button>
+                  {settingTab !== 'trash' && (
+                    <button onClick={() => setSettingTab('trash')} className="px-5 py-2.5 rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 font-medium transition-colors flex items-center"><Trash2 className="w-4 h-4 mr-2" /> 삭제 이력 및 복원</button>
+                  )}
                   <button onClick={saveItems} className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center font-medium shadow-sm transition-colors"><Save className="w-4 h-4 mr-2" /> 전체 변경사항 저장</button>
                 </div>
               </div>
