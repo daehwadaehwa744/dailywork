@@ -14,6 +14,18 @@
   
   <!-- Babel for parsing JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Firebase v11 (ES Modules) -> window 객체 브릿지 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    window.Firebase = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, setDoc, onSnapshot, collection };
+    window.firebaseLoaded = true;
+    window.dispatchEvent(new Event('firebase-loaded'));
+  </script>
+
   <script>
     // 브라우저 환경에서 Babel의 내장 'react' 프리셋을 올바르게 참조하여 classic 런타임으로 등록합니다.
     Babel.registerPreset('react-classic', {
@@ -28,15 +40,12 @@
 
   <!-- 등록한 'react-classic' 프리셋을 적용하여 import 오류 방지 -->
   <script type="text/babel" data-presets="react-classic">
-    const { useState, useMemo, useEffect } = React;
+    const { useState, useMemo, useEffect, useRef } = React;
 
     // --- 아이콘 컴포넌트 (lucide-react 대체) ---
     const IconBase = ({ children, className = "", ...props }) => (
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
-        {children}
-      </svg>
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{children}</svg>
     );
-
     const Settings = (props) => <IconBase {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></IconBase>;
     const Printer = (props) => <IconBase {...props}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></IconBase>;
     const Plus = (props) => <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></IconBase>;
@@ -47,6 +56,7 @@
     const ArrowDown = (props) => <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></IconBase>;
     const History = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></IconBase>;
     const RotateCcw = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
+    const Cloud = (props) => <IconBase {...props}><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></IconBase>;
 
     // --- 핵심 로직 및 데이터 ---
     const generateId = () => Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
@@ -83,60 +93,142 @@
       const todayDate = new Date().toISOString().split('T')[0];
       
       const [selectedDate, setSelectedDate] = useState(() => {
-        if (typeof window !== 'undefined') return window.localStorage.getItem('worklog_date_v3') || todayDate;
+        if (typeof window !== 'undefined') return window.localStorage.getItem('worklog_date_v4') || todayDate;
         return todayDate;
       });
 
-      const [items, setItems] = useState(() => {
-        if (typeof window !== 'undefined') {
-          const v3 = window.localStorage.getItem('worklog_items_v3');
-          if (v3) return JSON.parse(v3);
+      // 데이터 상태 관리
+      const [items, setItems] = useState(initialDefaultItems);
+      const [approvalLine, setApprovalLine] = useState(defaultApprovalLine);
+      const [dailyRecords, setDailyRecords] = useState({});
+      const [monthlyPlans, setMonthlyPlans] = useState({});
+      const [remarks, setRemarks] = useState({});
+
+      // Closure 방지용 Refs (동기화 함수에서 최신 상태 참조)
+      const itemsRef = useRef(items);
+      const approvalLineRef = useRef(approvalLine);
+      const dailyRecordsRef = useRef(dailyRecords);
+      const monthlyPlansRef = useRef(monthlyPlans);
+      const remarksRef = useRef(remarks);
+
+      useEffect(() => { itemsRef.current = items; }, [items]);
+      useEffect(() => { approvalLineRef.current = approvalLine; }, [approvalLine]);
+      useEffect(() => { dailyRecordsRef.current = dailyRecords; }, [dailyRecords]);
+      useEffect(() => { monthlyPlansRef.current = monthlyPlans; }, [monthlyPlans]);
+      useEffect(() => { remarksRef.current = remarks; }, [remarks]);
+
+      // Firebase 관련 상태
+      const [loading, setLoading] = useState(true);
+      const [isFirebaseMode, setIsFirebaseMode] = useState(false);
+      const [fb, setFb] = useState(null);
+      const [user, setUser] = useState(null);
+
+      // 데이터 동기화 코어 함수 (Firebase or LocalStorage)
+      const syncData = (newData) => {
+        if (isFirebaseMode && fb && user) {
+          const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+          const docRef = fb.doc(fb.db, 'artifacts', appId, 'public', 'data', 'worklogs', 'main');
           
-          const v2 = window.localStorage.getItem('worklog_items_v2');
-          if (v2) {
-            return JSON.parse(v2).map(item => ({
-              id: item.id,
-              versions: item.versions || [{ versionId: generateId(), applyDate: item.startDate || '2000-01-01', main: item.main || '', sub: item.sub || '', name: item.name || '' }],
-              deletedDate: item.deletedDate || item.endDate || null
-            }));
+          const updates = {};
+          // 복잡한 중첩 배열 객체들은 모두 JSON.stringify 처리하여 Firestore 내부 변환 에러(c050) 방지
+          if (newData.items !== undefined) updates.itemsJson = JSON.stringify(newData.items);
+          if (newData.approvalLine !== undefined) updates.approvalLineJson = JSON.stringify(newData.approvalLine);
+          if (newData.dailyRecords !== undefined) updates.dailyRecordsJson = JSON.stringify(newData.dailyRecords);
+          if (newData.monthlyPlans !== undefined) updates.monthlyPlansJson = JSON.stringify(newData.monthlyPlans);
+          if (newData.remarks !== undefined) updates.remarksJson = JSON.stringify(newData.remarks);
+          
+          fb.setDoc(docRef, updates, { merge: true }).catch(console.error);
+        } else {
+          // Firebase 설정 없으면 로컬 환경으로 폴백
+          if (newData.items !== undefined) window.localStorage.setItem('worklog_items_v4', JSON.stringify(newData.items));
+          if (newData.approvalLine !== undefined) window.localStorage.setItem('worklog_approval_v4', JSON.stringify(newData.approvalLine));
+          if (newData.dailyRecords !== undefined) window.localStorage.setItem('worklog_daily_v4', JSON.stringify(newData.dailyRecords));
+          if (newData.monthlyPlans !== undefined) window.localStorage.setItem('worklog_plans_v4', JSON.stringify(newData.monthlyPlans));
+          if (newData.remarks !== undefined) window.localStorage.setItem('worklog_remarks_v4', JSON.stringify(newData.remarks));
+        }
+      };
+
+      // 초기 환경 및 Firebase 로딩
+      useEffect(() => {
+        if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+          // 로컬 스토리지 데이터 로드
+          setItems(JSON.parse(window.localStorage.getItem('worklog_items_v4') || window.localStorage.getItem('worklog_items_v3')) || initialDefaultItems);
+          setApprovalLine(JSON.parse(window.localStorage.getItem('worklog_approval_v4') || window.localStorage.getItem('worklog_approval_v3')) || defaultApprovalLine);
+          setDailyRecords(JSON.parse(window.localStorage.getItem('worklog_daily_v4') || window.localStorage.getItem('worklog_daily_v3') || '{}'));
+          setMonthlyPlans(JSON.parse(window.localStorage.getItem('worklog_plans_v4') || window.localStorage.getItem('worklog_plans_v3') || '{}'));
+          setRemarks(JSON.parse(window.localStorage.getItem('worklog_remarks_v4') || window.localStorage.getItem('worklog_remarks_v3') || '{}'));
+          setLoading(false);
+          return;
+        }
+
+        setIsFirebaseMode(true);
+
+        const setupFirebase = async (FirebaseInstance) => {
+          try {
+            const firebaseConfig = JSON.parse(__firebase_config);
+            const app = FirebaseInstance.initializeApp(firebaseConfig);
+            const auth = FirebaseInstance.getAuth(app);
+            const db = FirebaseInstance.getFirestore(app);
+
+            const initAuth = async () => {
+              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await FirebaseInstance.signInWithCustomToken(auth, __initial_auth_token);
+              } else {
+                await FirebaseInstance.signInAnonymously(auth);
+              }
+            };
+            await initAuth();
+
+            FirebaseInstance.onAuthStateChanged(auth, (u) => {
+              setUser(u);
+              setFb({ db, doc: FirebaseInstance.doc, setDoc: FirebaseInstance.setDoc, onSnapshot: FirebaseInstance.onSnapshot, collection: FirebaseInstance.collection });
+            });
+          } catch(e) {
+            console.error("Firebase 초기화 에러:", e);
+            setLoading(false);
           }
+        };
+
+        if (window.firebaseLoaded) {
+          setupFirebase(window.Firebase);
+        } else {
+          window.addEventListener('firebase-loaded', () => setupFirebase(window.Firebase));
         }
-        return initialDefaultItems;
-      });
+      }, []);
 
-      const [approvalLine, setApprovalLine] = useState(() => {
-        if (typeof window !== 'undefined') {
-          const saved = window.localStorage.getItem('worklog_approval_v3') || window.localStorage.getItem('worklog_approval_v2');
-          if (saved) return JSON.parse(saved);
-        }
-        return defaultApprovalLine;
-      });
+      // Firebase 실시간 리스너 (실시간 동기화)
+      useEffect(() => {
+        if (!fb || !user) return;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const docRef = fb.doc(fb.db, 'artifacts', appId, 'public', 'data', 'worklogs', 'main');
 
-      const [dailyRecords, setDailyRecords] = useState(() => {
-        if (typeof window !== 'undefined') return JSON.parse(window.localStorage.getItem('worklog_daily_v3') || window.localStorage.getItem('worklog_daily_v2') || '{}');
-        return {};
-      });
+        const unsubscribe = fb.onSnapshot(docRef, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data.itemsJson) setItems(JSON.parse(data.itemsJson));
+            else if (data.items) setItems(data.items); // 이전 버전 호환
 
-      const [monthlyPlans, setMonthlyPlans] = useState(() => {
-        if (typeof window !== 'undefined') return JSON.parse(window.localStorage.getItem('worklog_plans_v3') || window.localStorage.getItem('worklog_plans_v2') || '{}');
-        return {};
-      });
+            if (data.approvalLineJson) setApprovalLine(JSON.parse(data.approvalLineJson));
+            else if (data.approvalLine) setApprovalLine(data.approvalLine); // 이전 버전 호환
 
-      const [remarks, setRemarks] = useState(() => {
-        if (typeof window !== 'undefined') return JSON.parse(window.localStorage.getItem('worklog_remarks_v3') || window.localStorage.getItem('worklog_remarks_v2') || '{}');
-        return {};
-      });
+            if (data.dailyRecordsJson) setDailyRecords(JSON.parse(data.dailyRecordsJson));
+            if (data.monthlyPlansJson) setMonthlyPlans(JSON.parse(data.monthlyPlansJson));
+            if (data.remarksJson) setRemarks(JSON.parse(data.remarksJson));
+          }
+          setLoading(false);
+        }, (err) => {
+          console.error("Firebase 구독 에러:", err);
+          setLoading(false);
+        });
+
+        return () => unsubscribe();
+      }, [fb, user]);
 
       useEffect(() => {
         if (isMounted && typeof window !== 'undefined') {
-          window.localStorage.setItem('worklog_date_v3', selectedDate);
-          window.localStorage.setItem('worklog_items_v3', JSON.stringify(items));
-          window.localStorage.setItem('worklog_approval_v3', JSON.stringify(approvalLine));
-          window.localStorage.setItem('worklog_daily_v3', JSON.stringify(dailyRecords));
-          window.localStorage.setItem('worklog_plans_v3', JSON.stringify(monthlyPlans));
-          window.localStorage.setItem('worklog_remarks_v3', JSON.stringify(remarks));
+          window.localStorage.setItem('worklog_date_v4', selectedDate);
         }
-      }, [selectedDate, items, approvalLine, dailyRecords, monthlyPlans, remarks, isMounted]);
+      }, [selectedDate, isMounted]);
 
       useEffect(() => setIsMounted(true), []);
 
@@ -200,6 +292,7 @@
 
         setItems(newItemsToSave);
         setApprovalLine(cleanedAppr);
+        syncData({ items: newItemsToSave, approvalLine: cleanedAppr });
         setIsSettingModalOpen(false);
       };
 
@@ -309,9 +402,8 @@
         setEditingApprovalLine(newAppr);
       };
 
-      const handleUpdate = (storeType, id, field, value) => {
+      const handleLocalUpdate = (storeType, id, field, value) => {
         const numValue = value === '' ? 0 : parseInt(value, 10);
-        
         if (storeType === 'daily') {
           setDailyRecords(prev => ({
             ...prev,
@@ -329,6 +421,11 @@
             }
           }));
         }
+      };
+
+      // 입력칸에서 포커스가 벗어날 때(onBlur)만 Firebase 동기화 트리거 (입력 깜빡임 방지)
+      const handleInputBlur = () => {
+        syncData({ dailyRecords: dailyRecordsRef.current, monthlyPlans: monthlyPlansRef.current });
       };
 
       const { renderRows, grandTotal } = useMemo(() => {
@@ -432,6 +529,15 @@
 
       if (!isMounted) return null;
 
+      if (loading) {
+        return (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 text-gray-500 font-bold">
+            <Cloud className="w-10 h-10 mb-4 animate-pulse text-blue-500" />
+            데이터를 불러오는 중입니다...
+          </div>
+        );
+      }
+
       return (
         <div className="min-h-screen bg-gray-100 p-4 sm:p-8 font-sans text-gray-800">
           <style dangerouslySetInnerHTML={{__html: `
@@ -514,6 +620,11 @@
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <div className="text-xs font-bold px-3 py-2 rounded bg-gray-50 text-gray-500 flex items-center border border-gray-200 mr-2">
+                {isFirebaseMode ? (
+                  <span className="text-blue-600 flex items-center"><Cloud className="w-4 h-4 mr-1.5" /> 클라우드 실시간 동기화 됨</span>
+                ) : '로컬 브라우저 저장됨'}
+              </div>
               <button 
                 onClick={openSettingModal}
                 className="flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium border border-gray-200"
@@ -538,7 +649,7 @@
                 <p className="text-gray-500 mt-2 font-medium">일자 : {selectedDate}</p>
               </div>
 
-              {/* 결재칸 (인쇄 시 폭 100% 방지 및 크기 고정을 위해 approval-table 클래스 추가) */}
+              {/* 결재칸 */}
               <table className="border-collapse border-2 border-gray-800 text-sm bg-white approval-table">
                 <tbody>
                   <tr>
@@ -634,14 +745,16 @@
                         <td className="border border-gray-300 p-0 bg-blue-50/30 col-num">
                           <input 
                             type="number" min="0" value={row.plan.count || ''} 
-                            onChange={(e) => handleUpdate('plan', row.item.id, 'count', e.target.value)}
+                            onChange={(e) => handleLocalUpdate('plan', row.item.id, 'count', e.target.value)}
+                            onBlur={handleInputBlur}
                             className="w-full h-full text-center p-2 outline-none focus:bg-blue-100 hover:bg-blue-50 transition-colors bg-transparent" placeholder="0"
                           />
                         </td>
                         <td className="border border-gray-300 p-0 bg-blue-50/30 col-num">
                           <input 
                             type="number" min="0" value={row.plan.people || ''} 
-                            onChange={(e) => handleUpdate('plan', row.item.id, 'people', e.target.value)}
+                            onChange={(e) => handleLocalUpdate('plan', row.item.id, 'people', e.target.value)}
+                            onBlur={handleInputBlur}
                             className="w-full h-full text-center p-2 outline-none focus:bg-blue-100 hover:bg-blue-50 transition-colors bg-transparent" placeholder="0"
                           />
                         </td>
@@ -649,14 +762,16 @@
                         <td className="border border-gray-300 p-0 bg-green-50/30 col-num">
                           <input 
                             type="number" min="0" value={row.daily.count || ''} 
-                            onChange={(e) => handleUpdate('daily', row.item.id, 'count', e.target.value)}
+                            onChange={(e) => handleLocalUpdate('daily', row.item.id, 'count', e.target.value)}
+                            onBlur={handleInputBlur}
                             className="w-full h-full text-center p-2 outline-none focus:bg-green-100 hover:bg-green-50 transition-colors bg-transparent font-medium" placeholder="0"
                           />
                         </td>
                         <td className="border border-gray-300 p-0 bg-green-50/30 col-num">
                           <input 
                             type="number" min="0" value={row.daily.people || ''} 
-                            onChange={(e) => handleUpdate('daily', row.item.id, 'people', e.target.value)}
+                            onChange={(e) => handleLocalUpdate('daily', row.item.id, 'people', e.target.value)}
+                            onBlur={handleInputBlur}
                             className="w-full h-full text-center p-2 outline-none focus:bg-green-100 hover:bg-green-50 transition-colors bg-transparent font-medium" placeholder="0"
                           />
                         </td>
@@ -677,7 +792,8 @@
               <textarea
                 className="w-full h-32 p-4 outline-none resize-none bg-transparent"
                 value={remarks[selectedDate] || ''}
-                onChange={(e) => setRemarks({ ...remarks, [selectedDate]: e.target.value })}
+                onChange={(e) => setRemarks(prev => ({ ...prev, [selectedDate]: e.target.value }))}
+                onBlur={() => syncData({ remarks: remarksRef.current })}
                 placeholder="특이사항 및 비고를 입력하세요"
               ></textarea>
             </div>
